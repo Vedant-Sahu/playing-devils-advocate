@@ -10,7 +10,7 @@ from .common import _llm, PERSONAS, PERSONA_GUIDELINES
 def student_respond(persona: str, explanation: str) -> str:
     key = persona.lower().strip()
     guide = PERSONA_GUIDELINES.get(key, "You are a student.")
-    llm = _llm(temperature=0.0)
+    llm = _llm(temperature=0.0, role="student")
     sys = SystemMessage(
         content=(
             guide
@@ -23,7 +23,6 @@ def student_respond(persona: str, explanation: str) -> str:
             "Do NOT use lists, headings, or markdown. No backticks. "
             "Examples of good questions: \"Could you show a small numeric example to illustrate the effect of the learning rate?\" "
             "and \"How does mini-batch noise change convergence compared to full-batch updates?\" "
-            "Examples of bad (off-topic) questions: \"Explain transformers from scratch\", \"Teach me linear algebra\"."
         )
     )
     hum = HumanMessage(content=f"Explanation:\n{explanation}")

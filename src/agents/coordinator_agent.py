@@ -12,7 +12,7 @@ def analyze_topics(
     last_explanation: Optional[str] = None,
     last_feedback_by_persona: Optional[Dict[str, str]] = None,
 ) -> List[str]:
-    llm = _llm(json_mode=True)
+    llm = _llm(json_mode=True, role="coordinator")
     feedback_summary = ""
     if last_feedback_by_persona:
         parts: List[str] = []
