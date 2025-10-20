@@ -42,7 +42,7 @@ def reward_score(persona: str, student_response: str) -> int:
         ),
     }.get(persona, "Constructive = specific, actionable feedback aligned to the persona.")
 
-    llm = _llm(temperature=0.0)
+    llm = _llm(temperature=0.0, role="critique_eval")
     sys = SystemMessage(
         content=(
             f"You are the Reward Agent for persona '{persona}'. Rate how constructive the student's "

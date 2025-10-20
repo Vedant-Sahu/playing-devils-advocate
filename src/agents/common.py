@@ -4,6 +4,9 @@ import json
 import re
 from dataclasses import dataclass
 from typing import Any, Dict, List
+import os
+from dotenv import load_dotenv
+from pathlib import Path
 
 from langchain_openai import ChatOpenAI
 
@@ -41,15 +44,76 @@ PERSONA_GUIDELINES: Dict[str, str] = {
     ),
 }
 
+load_dotenv()
 
-def _llm(temperature: float = 0.2, json_mode: bool = False) -> ChatOpenAI:
+
+def _model_for_role(role: str | None) -> str:
+    default_model = os.getenv("MODEL_NAME", "gpt-4o-mini")
+    if role:
+        key = {
+            "teacher": "TEACHER_MODEL",
+            "grading": "GRADING_MODEL",
+            "coordinator": "COORDINATOR_MODEL",
+            "student": "STUDENT_MODEL",
+            "critique_eval": "CRITIQUE_EVAL_MODEL",
+        }.get(role.lower().strip())
+        if key:
+            v = os.getenv(key)
+            if v:
+                return v
+    return default_model
+
+
+def _llm(temperature: float = 0.2, json_mode: bool = False, role: str | None = None) -> ChatOpenAI:
+    model = _model_for_role(role)
     if json_mode:
         return ChatOpenAI(
-            model="gpt-4o-mini",
+            model=model,
             temperature=temperature,
             model_kwargs={"response_format": {"type": "json_object"}},
         )
-    return ChatOpenAI(model="gpt-4o-mini", temperature=temperature)
+    return ChatOpenAI(model=model, temperature=temperature)
+
+
+# Attempt to load personas and class distribution from data/student_profiles.json
+def _load_personas_from_json() -> tuple[list[str] | None, dict[str, str] | None, dict[str, float] | None]:
+    try:
+        data_path = Path(__file__).resolve().parents[2] / "data" / "student_profiles.json"
+        if not data_path.exists():
+            return None, None, None
+        data = json.loads(data_path.read_text(encoding="utf-8"))
+        personas_json = data.get("personas", [])
+        if not isinstance(personas_json, list) or not personas_json:
+            return None, None, None
+        personas: list[str] = []
+        guides: dict[str, str] = {}
+        for item in personas_json:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("name", "")).strip()
+            guide = str(item.get("guidelines", "")).strip()
+            if not name:
+                continue
+            personas.append(name)
+            if guide:
+                guides[name] = guide
+        class_dist = data.get("class_distribution")
+        if not personas:
+            return None, None, None
+        return personas, guides or None, class_dist if isinstance(class_dist, dict) else None
+    except Exception:
+        return None, None, None
+
+
+_p, _g, _dist = _load_personas_from_json()
+if _p:
+    PERSONAS = _p
+if _g:
+    PERSONA_GUIDELINES.update({k: v for k, v in _g.items() if v})
+# Optional export of class distribution for future weighting use
+CLASS_DISTRIBUTION: Dict[str, float] = (
+    {p: 1.0 / len(PERSONAS) for p in PERSONAS} if not _dist else {str(k): float(v) for k, v in _dist.items() if str(k) in PERSONAS}
+)
 
 
 def _extract_json(text: str) -> Any:

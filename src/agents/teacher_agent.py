@@ -23,7 +23,7 @@ def teacher_explain(
     max_tokens: int = 700,
     word_cap: int = 180,
 ) -> str:
-    llm = _llm()
+    llm = _llm(role="teacher")
     feedback_summary = ""
     if student_feedback_by_persona:
         compact = []

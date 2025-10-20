@@ -1,0 +1,82 @@
+{
+  "problems": [
+    {
+      "id": "newton_second_law_incline",
+      "question": "Explain Newton's second law and apply it to a block on an inclined plane with kinetic friction.",
+      "rubric_focus": ["free-body diagram", "resolve forces along plane", "normal force and friction", "acceleration expression"],
+      "gold_answer": "Newton's second law: F_net = m a. For a mass m on an incline at angle θ with kinetic friction μ_k, choose axes along and normal to the plane. Along the plane: m a = m g sin θ − μ_k m g cos θ, since N = m g cos θ. Therefore a = g (sin θ − μ_k cos θ)."
+    },
+    {
+      "id": "work_energy_theorem",
+      "question": "State the work–energy theorem and use it to find the speed of a frictionless block sliding from height h.",
+      "rubric_focus": ["W = ΔK", "convert potential to kinetic", "neglect nonconservative forces"],
+      "gold_answer": "Work–energy theorem: W_total = ΔK. With only gravity, m g h converts to kinetic energy: 1/2 m v^2 = m g h, so v = √(2 g h)."
+    },
+    {
+      "id": "simple_harmonic_motion",
+      "question": "Give the equation of motion, period, and energy for a mass–spring oscillator (no damping).",
+      "rubric_focus": ["Hooke's law", "x¨ + (k/m) x = 0", "T = 2π√(m/k)", "energy partition"],
+      "gold_answer": "For mass m and spring constant k: x¨ + (k/m) x = 0 with solution x(t) = A cos(ω t + φ), ω = √(k/m). Period T = 2π√(m/k). Total energy is constant: E = 1/2 k A^2 = 1/2 k x^2 + 1/2 m v^2."
+    },
+    {
+      "id": "projectile_motion_basics",
+      "question": "Describe projectile motion (no air resistance): time of flight, range, and maximum height for launch speed v0 at angle θ.",
+      "rubric_focus": ["separate x/y", "constant ax = 0, ay = −g", "formulas for T, R, H"],
+      "gold_answer": "With ax = 0 and ay = −g: T = 2 v0 sin θ / g, horizontal range R = v0^2 sin 2θ / g, and max height H = v0^2 sin^2 θ / (2 g)."
+    },
+    {
+      "id": "uniform_circular_motion_banked_curve",
+      "question": "For a frictionless banked curve of radius r and speed v, derive the banking angle θ for no lateral slipping.",
+      "rubric_focus": ["centripetal force mv^2/r", "normal force components", "no friction", "tan θ formula"],
+      "gold_answer": "Centripetal requirement: horizontal component of normal provides mv^2/r. With no friction: N sin θ = m v^2 / r and N cos θ = m g. Thus tan θ = v^2 / (r g)."
+    },
+    {
+      "id": "torque_angular_momentum_conservation",
+      "question": "State the conditions for angular momentum conservation and explain the spinning skater example.",
+      "rubric_focus": ["τ_ext = dL/dt", "zero external torque ⇒ L constant", "Iω tradeoff"],
+      "gold_answer": "Angular momentum L is conserved if net external torque is zero: τ_ext = dL/dt = 0 ⇒ L constant. A skater pulling in arms reduces I, so ω increases to keep L = I ω constant."
+    },
+    {
+      "id": "double_slit_interference",
+      "question": "State the conditions for bright and dark fringes in double-slit interference with slit separation d and wavelength λ.",
+      "rubric_focus": ["path difference", "constructive vs destructive", "mλ vs (m+1/2)λ"],
+      "gold_answer": "Constructive (bright) interference when path difference Δ = m λ (m ∈ ℤ). Destructive (dark) when Δ = (m + 1/2) λ. For small angles, fringe spacing on a screen at distance L is Δy ≈ λ L / d."
+    },
+    {
+      "id": "ideal_gas_law_kinetic_theory",
+      "question": "State the ideal gas law and relate temperature to average kinetic energy of molecules.",
+      "rubric_focus": ["PV = nRT", "monoatomic KE = 3/2 k_B T", "microscopic meaning of T"],
+      "gold_answer": "Ideal gas law: P V = n R T. In kinetic theory, average translational kinetic energy per molecule is ⟨K⟩ = 3/2 k_B T for a monatomic ideal gas; temperature measures average kinetic energy."
+    },
+    {
+      "id": "electric_field_point_charge_superposition",
+      "question": "State Coulomb’s law and explain how to find the net electric field from multiple point charges.",
+      "rubric_focus": ["magnitude k|q1 q2|/r^2", "direction along line of centers", "vector superposition"],
+      "gold_answer": "Coulomb’s law: the force magnitude between point charges is F = k |q1 q2|/r^2, along the line joining them (repulsive for like charges). The electric field of a point charge is E = k q / r^2 (radial). Net fields add by vector superposition: E_net = Σ E_i."
+    },
+    {
+      "id": "dc_circuits_series_parallel",
+      "question": "Explain equivalent resistance for series and parallel resistors and how current distributes in a simple DC circuit.",
+      "rubric_focus": ["R_series = ΣR", "1/R_parallel = Σ(1/R)", "Ohm’s law", "current splitting by branch resistance"],
+      "gold_answer": "Series: equivalent resistance adds, R_eq = Σ R_i. Parallel: reciprocals add, 1/R_eq = Σ (1/R_i). With a given voltage, Ohm’s law I = V/R sets total current; in parallel branches, current divides inversely with resistance so V is the same across branches."
+    },
+    {
+      "id": "gauss_law_sphere",
+      "question": "Use Gauss’s law to find the electric field of a uniformly charged solid sphere (total charge Q, radius R) inside and outside.",
+      "rubric_focus": ["Φ_E = ∮E·dA = Q_enc/ε0", "spherical symmetry", "inside ∝ r, outside ∝ 1/r^2"],
+      "gold_answer": "By symmetry, E is radial and constant on a spherical surface. For r ≥ R: Q_enc = Q, so E = 1/(4π ε0) · Q / r^2. For r < R: Q_enc = Q (r^3/R^3), so E = 1/(4π ε0) · Q r / R^3, i.e., linear in r."
+    },
+    {
+      "id": "faraday_law_lenz",
+      "question": "State Faraday’s law and Lenz’s law, and explain the direction of induced current when magnetic flux increases through a loop.",
+      "rubric_focus": ["ε = −dΦ_B/dt", "Lenz’s sign opposes change", "right-hand rule for direction"],
+      "gold_answer": "Faraday’s law: induced EMF ε = − dΦ_B/dt. Lenz’s law: the induced current creates a magnetic field that opposes the change in flux. If external flux through a loop increases into the page, the induced current flows to create a field out of the page (counterclockwise by right-hand rule)."
+    },
+    {
+      "id": "thermodynamics_first_law_processes",
+      "question": "State the first law of thermodynamics and distinguish isothermal, adiabatic, and isobaric processes for an ideal gas.",
+      "rubric_focus": ["ΔU = Q − W (by system)", "isothermal ΔU=0", "adiabatic Q=0", "isobaric W = P ΔV"],
+      "gold_answer": "First law: ΔU = Q − W, with W the work done by the system. Isothermal (ideal gas): ΔU = 0 so Q = W. Adiabatic: Q = 0 so ΔU = −W (temperature changes). Isobaric: P is constant and W = P ΔV; internal energy change depends on ΔT."
+    }
+  ]
+}
