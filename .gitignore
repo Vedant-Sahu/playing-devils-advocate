@@ -209,3 +209,7 @@ __marimo__/
 *.sqlite
 results/
 keys/
+
+# GPQA dataset cache
+data/cache/*
+!data/cache/.gitkeep

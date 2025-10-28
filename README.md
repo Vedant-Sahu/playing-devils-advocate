@@ -2,7 +2,7 @@
 
 A multi-agent system where a teacher agent creates educational explanations that are iteratively refined through feedback from diverse student agents with different learning profiles. A game-theory reward mechanism evaluates critique quality and determines when explanations have converged to optimal clarity, ultimately validated by measuring student learning outcomes across different backgrounds.
 
-## Team
+## Collaborators
 - Teo Nocita
 - Vedant Sahu
 
@@ -11,6 +11,8 @@ A multi-agent system where a teacher agent creates educational explanations that
 playing-devils-advocate/
 ├── notebooks/
 │   └── main_workflow.ipynb          # LangGraph orchestration
+├── scripts/
+│   └── download_gpqa.py             # Downloads GPQA questions from Hugging Face
 ├── src/
 │   ├── agents/
 │   │   ├── coordinator_agent.py     # Orchestrates the workflow
@@ -20,8 +22,10 @@ playing-devils-advocate/
 │   │   └── grading_agent.py         # Evaluates learning outcomes
 │   └── utils/
 │       ├── config.py                # Configuration and environment variables
-│       └── stopping_criterion.py    # Convergence detection
+│       |── stopping_criterion.py    # Convergence detection
+|       └── gpqa_loader.py           # Loads cached GPQA questions from data/cache
 ├── data/
+│   ├── cache/                       # Cached GPQA dataset (gitignored)
 │   ├── student_profiles.json        # Student learning profiles
 │   └── sample_problems.json         # Test problems
 └── results/                         # Output and evaluation results
@@ -48,9 +52,15 @@ playing-devils-advocate/
 
 4. **Set up environment variables:**
    - Copy `.env.example` to `.env`
-   - Add your OpenAI API key:
+   - Add your OpenAI API key and Hugging Face Access Token:
      ```
      OPENAI_API_KEY=your_key_here
+     HF_TOKEN=your_token_here
+     ```
+
+5. **Download GPQA dataset:**
+     ```cmd
+     python scripts/download_gpqa.py
      ```
 
 ## How to Run
