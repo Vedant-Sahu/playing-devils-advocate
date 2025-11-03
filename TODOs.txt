@@ -1,0 +1,36 @@
+Prioritized TODOs (sorted by Difficulty asc, then Impact desc). Quick wins first.
+
+Legend: [Difficulty][Impact] where Difficulty ∈ {Easy, Medium, Hard}, Impact ∈ {High, Medium, Low}
+
+EASY — HIGH IMPACT
+- [Easy][High] Add reading-level control via env (e.g., READING_LEVEL) and incorporate into `teacher_agent` system prompt.
+- [Easy][High] Support persona distribution (weighting/sampling) in `students_node` via config (env or JSON) to simulate class composition.
+- [Easy][High] Export teacher artifacts per run: final explanation and "unresolved questions by persona" under `results/<run_id>/`.
+
+EASY — MEDIUM IMPACT
+- [Easy][Medium] Standardize output locations to `results/` across notebook and agents; consolidate `edu_refine.sqlite` location.
+- [Easy][Medium] Add per-iteration JSON logging (topics, explanation len, reward scores, decision, timing, cost if available).
+- [Easy][Medium] Add smoke tests for nodes (`coordinator_node`, `teacher_node`, `students_node`, `reward_node`, `stopper_node`) in `tests/` with temperature=0.0.
+- [Easy][Medium] Trim `requirements.txt` to essentials and stable versions; remove future-dated pins.
+- [Easy][Medium] Token/cost tracking if provider supports it; surface in logs and final summary.
+
+MEDIUM — HIGH IMPACT
+- [Medium][High] Add CLI batch runner `src/cli.py` to run `data/sample_problems.json` and produce `results/summary.csv` with metrics per run.
+- [Medium][High] Add LLM-judge rubric for final explanation (clarity, correctness, completeness, alignment-to-topics; 1–5 each, deterministic settings).
+- [Medium][High] Stagnation-aware stopping using `StopConfig.stagnation_window` and `stagnation_min_improvement` over average reward (and optionally TruLens relevance).
+- [Medium][High] Load personas from `data/student_profiles.json` with fallback defaults; update `student_agent.py` and `common.py` to use data-driven profiles.
+- [Medium][High] Teacher run modes: "single-pass draft" vs "refine until convergence"; include short "what changed" diff between iterations.
+
+MEDIUM — MEDIUM IMPACT
+- [Medium][Medium] Weighted persona aggregation (by class distribution) to drive coordinator and stopping decisions.
+- [Medium][Medium] Persona memory across rounds: summarize what worked/didn’t per persona and feed compact context back to `teacher_agent`.
+- [Medium][Medium] Baselines/ablations: (a) no-refine single-pass, (b) persona-blind refine, (c) full system; compare on the same problem set.
+- [Medium][Medium] Results notebook section to visualize iterations-to-stop, score improvements, and persona variance.
+
+HARD — HIGH IMPACT (OPTIONAL/EXPERIMENTS)
+- [Hard][High] RL experiment: contextual bandit to select topic emphasis or prompt style using `reward_scores` as reward; train offline from logged runs; evaluate vs heuristic coordinator.
+- [Hard][High] RL (stretch): policy-gradient/PPO-like tuning for coordinator topic selection or teacher prompt parameters; requires careful safety and eval; only if time permits.
+- [Hard][High] Minimal teacher UI (e.g., Streamlit) to run a question, pick personas/distribution, and view artifacts/scores.
+
+HARD — MEDIUM IMPACT
+- [Hard][Medium] Counterfactual/hard-negative personas mode to stress-test generalization (off by default for class use).

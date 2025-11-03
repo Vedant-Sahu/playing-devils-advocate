@@ -1,0 +1,131 @@
+Implementation Plan: Teacher-only first, then Student-to-Student (RAG + Peer)
+
+Summary
+- Phase 1 focuses on a high-quality teacher loop with strict concision and objective grading, without student agents driving revisions.
+- Phase 2 introduces RAG-backed students with strict output gating and (optionally) one peer round to surface evidence-backed gaps.
+- Both phases use toggles so we can A/B test and roll back safely.
+
+------------------------------------------------------------
+Phase 1 — Teacher-only loop (no student feedback)
+------------------------------------------------------------
+Goals
+- Produce concise, high-quality explanations with minimal drift across iterations.
+- Evaluate explanations using existing Grading Agent (quiz-based), not LLM-judge.
+- Establish robust logging/metrics for later A/B comparisons.
+
+Design
+- Workflow: coordinator → teacher → grading → END (skip students/reward/stopper), behind a flag.
+- Teacher constraints: short structured prose, single tiny example, no off-list topics, minimal revisions per iteration.
+- Evaluation: grading_agent generates a short quiz and scores persona answers based only on explanation.
+
+Phase 1 — Current status
+- DONE: Teacher word cap enforcement in teacher_agent and a concise, minimal-revision prompt.
+- DONE: Grading Agent present and used for objective evaluation (quiz-based, temperature=0 in calls).
+- TODO: Routing toggle for teacher-only path (bypass students/reward/stopper) in the LangGraph wiring.
+- TODO: READING_LEVEL control and per-iteration sentence-change budget (currently instruction-only, not enforced in code).
+- TODO: Standardized per-iteration logging to results/<run_id>/ with artifacts and metrics.
+- TODO: A/B harness for baseline vs strict teacher.
+
+Toggles & Config (proposed)
+- ENABLE_STUDENTS=false (default in Phase 1)
+- ENABLE_PEER_ROUND=false
+- READING_LEVEL (e.g., middle_school | high_school | college)
+- TEACHER_WORD_CAP (e.g., 160–200)
+- TEACHER_MAX_SENTENCE_CHANGES (e.g., 3 per iteration)
+
+Implementation Tasks
+1) Routing toggle
+   - Add flags to bypass students/reward/stopper and route teacher → grading (notebook + graph wiring).
+2) Teacher guardrails
+   - Incorporate READING_LEVEL; reinforce “revise minimally” and per-iteration sentence-change budget.
+   - Enforce hard word cap post-processing; optionally compute delta vs prior to cap changed sentences.
+3) Grading + metrics
+   - Keep current grading_agent; log per-iteration quiz, persona scores, overall.
+   - Capture explanation length, reading level (if available), cost/tokens (if provider supports).
+4) Logging & results
+   - Standardize results/<run_id>/ with run.json (state snapshots) and artifacts: final explanation, quiz, scores.
+5) A/B harness
+   - Compare: Baseline teacher vs Strict teacher (word cap + minimal revisions) on a small benchmark set.
+
+Success Criteria
+- Shorter explanations without quality loss (equal or better quiz scores).
+- Reduced iteration count to convergence (if stopper later used again).
+- Clear, reproducible logs for later comparison.
+
+Risks & Mitigations
+- Risk: Over-constrained teacher truncates necessary context → Monitor quiz scores and allow minor cap tuning.
+- Risk: Grading variability → Use temperature=0 and fixed settings; keep fallback quiz logic.
+
+Deliverables
+- Flags, updated teacher prompt/logic (revise-minimally), results/ logging, A/B notebook or CLI.
+
+------------------------------------------------------------
+Phase 2 — RAG-backed students + optional peer round
+------------------------------------------------------------
+Goals
+- Simulate a classroom with diverse knowledge sources.
+- Surface evidence-backed, non-redundant gaps that drive targeted teacher revisions.
+
+Design (students as RAG agents)
+- One vector store namespace per student persona (complementary corpora: theoretical, applied, visual, etc.).
+- Retrieval: dense index (e.g., Chroma/FAISS), chunking ~500–800 tokens, overlap 100–200; metadata: source/section.
+- Closed-book constraint: students must ground QUESTION/SUGGESTION in retrieved citations; otherwise respond OK or REQUEST_COVERAGE.
+
+Strict Output Gating (JSON schema)
+- type: OK | QUESTION | SUGGESTION | REQUEST_COVERAGE
+- message: 1–2 sentences, no fluff
+- citations: [{source, section, chunk_id}] required for QUESTION/SUGGESTION
+- Anti-repeat: if overlap with last round’s feedback > threshold, emit OK (unless new evidence appears)
+
+Optional Peer Round (1 turn max)
+- Claim–Challenge–Justify protocol:
+  - Student A: one evidence-backed claim (QUESTION/SUGGESTION) + citation(s).
+  - Student B: ACCEPT (cite) | CHALLENGE (counter-cite) | ABSTAIN.
+- Teacher sees only structured outputs (not raw chat) to avoid drift.
+
+Toggles & Config (proposed)
+- ENABLE_STUDENTS=true (Phase 2), ENABLE_PEER_ROUND=true|false (experiment)
+- RAG_STORE (path), RAG_EMBED_MODEL (e.g., text-embedding-3-small or open-source), TOP_K (e.g., 5)
+- CITATION_REQUIRED=true for QUESTION/SUGGESTION
+- NOVELTY_THRESHOLD (for anti-repeat), MAX_STUDENT_TOKENS
+
+Implementation Tasks
+1) Retrieval stack
+   - Choose store (Chroma/FAISS) and embeddings; implement ingestion CLI for PDFs/HTML; persist metadata.
+2) Per-student retrievers
+   - Namespacing per persona; simple persona-conditioned query rewrite; reranking (optional) for precision.
+3) Student node update
+   - Closed-book prompt + JSON schema; enforce citations; add validator that rejects non-compliant outputs.
+4) Peer round (optional)
+   - Implement constrained P2P turn with the claim–challenge–justify protocol and strict budgets.
+5) Reward & stopper
+   - Reward: give 3 only if cited and novel; penalize generic/lengthening asks; if unsure, lower score.
+   - Stopper: review early-STOP rules under stricter rewards; keep simple and deterministic.
+6) Observability
+   - Log retrieved chunks, citations, novelty checks, final diffs to teacher text, and quiz outcomes.
+7) A/B experiments
+   - Teacher-only vs RAG students; RAG w/ vs w/o peer round; measure unique issues found, citation validity, quiz gains, length.
+
+Success Criteria
+- Students produce concise, cited feedback; low redundancy across rounds.
+- Teacher revisions remain short but targeted; quiz scores improve vs Phase 1.
+- Citations validate (high precision on source/section).
+
+Risks & Mitigations
+- Retrieval sparsity → adjust k/thresholds; improve corpora quality; add reranker.
+- Hallucinated citations → strict schema + validator + reward penalty.
+- Verbosity drift → strict token budgets and gating; drop non-compliant outputs.
+
+Milestones
+- M1: Phase 1 toggles + logging + A/B (teacher-only).
+- M2: RAG pipeline + 1 pilot student behind a flag.
+- M3: All students RAG-enabled; strict schema + validator.
+- M4: Optional peer round and A/B evaluation.
+
+Evaluation Plan
+- Primary: grading quiz scores (overall and per persona).
+- Secondary: explanation length, iteration count, unique issues found, citation validity, cost/time.
+
+Notes
+- Keep LLM-judge disabled initially; add later only if needed for rubric diversity.
+- Maintain easy rollback with flags at each step.

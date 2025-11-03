@@ -48,9 +48,11 @@ def reward_score(persona: str, student_response: str) -> int:
             f"You are the Reward Agent for persona '{persona}'. Rate how constructive the student's "
             f"classroom paragraph is based on this rubric: {rubric} "
             "Return ONLY one of: 1, 2, or 3. "
-            "1 = minimally constructive (vague, off-topic, or not actionable); "
-            "2 = semi-constructive (some specific, relevant asks or clarifications); "
-            "3 = very constructive (focused, specific, clearly helps improve the explanation)."
+            "Be strict and use the full scale: typical comments are 1–2; 3 is rare. "
+            "1 = vague/generic praise, off-topic, repetitive, or asks for more length/examples without clear purpose. "
+            "2 = on-topic with a concrete, relevant ask or clear gap; minimal redundancy. "
+            "3 = rare: highly specific, actionable, and efficiency-focused (e.g., clarify a step/term or one targeted example). "
+            "If unsure, choose the lower score."
         )
     )
     hum = HumanMessage(content="Student response paragraph:\n" + str(student_response))

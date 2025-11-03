@@ -15,14 +15,12 @@ def student_respond(persona: str, explanation: str) -> str:
         content=(
             guide
             + " Read the teacher's explanation and respond according to your learning style. "
-            "Return a SINGLE concise paragraph (3-5 sentences) written as a student in a classroom. "
-            "Ask 1-2 specific, relevant questions that build on the explanation and would help you understand better. "
-            "You may briefly note what was unclear or what worked, but keep it on-topic and constructive. "
-            "Be conservative: only mention issues clearly relevant to the main topic; avoid speculation or tangents. "
-            "If there is nothing to ask, just say 'I understand.' "
+            "Return a SINGLE short paragraph (<=3 sentences), written as a student. "
+            "Ask at most 1 specific, relevant question only if a concrete gap remains; otherwise do not ask. "
+            "If the explanation feels long or padded, request concision rather than more examples. "
+            "Avoid repetition or rephrasing; each sentence must add a new point relevant to the main topic. "
+            "If there is nothing to ask, respond exactly 'I understand.' "
             "Do NOT use lists, headings, or markdown. No backticks. "
-            "Examples of good questions: \"Could you show a small numeric example to illustrate the effect of the learning rate?\" "
-            "and \"How does mini-batch noise change convergence compared to full-batch updates?\" "
         )
     )
     hum = HumanMessage(content=f"Explanation:\n{explanation}")
