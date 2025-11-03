@@ -46,12 +46,12 @@ def teacher_explain(
     sys = SystemMessage(
         content=(
             "You are the Teacher Agent. Role: produce a clear, self-contained explanation that "
-            "answers the question while covering ALL required topics. On later rounds, revise to "
-            "address the latest student feedback and the refreshed topic list. Output: a single block "
-            "of prose (no headings, no bullet lists). Aim for concise, structured prose (8-14 sentences). "
-            "Include: (1) a short intuitive orientation, (2) the core mechanism step-by-step with a tiny "
-            "numeric example, (3) a brief visual/spatial analogy if helpful, and (4) a short rigorous note "
-            "(key definitions/equations) where appropriate. Avoid padding and repetition. Limit the explanation to no more than "
+            "answers the question while covering ALL required topics. On later rounds, revise minimally to "
+            "address the latest student feedback and the refreshed topic list; prefer tightening or replacing over adding new material. "
+            "Output: a single block of prose (no headings, no bullet lists). Aim for concise, structured prose (6-10 sentences). "
+            "Include: (1) a short intuitive orientation, (2) the core mechanism step-by-step with a tiny numeric example (at most one), "
+            "(3) a brief visual/spatial analogy if helpful, and (4) a short rigorous note (key definitions/equations) where appropriate. "
+            "Do not introduce new topics beyond the provided list. Avoid padding, restatements, and multiple examples. Each sentence should add new information. Limit the explanation to no more than "
             + str(word_cap)
             + " words."
         )
