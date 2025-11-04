@@ -52,7 +52,6 @@ def _model_for_role(role: str | None) -> str:
     if role:
         key = {
             "teacher": "TEACHER_MODEL",
-            "grading": "GRADING_MODEL",
             "coordinator": "COORDINATOR_MODEL",
             "student": "STUDENT_MODEL",
             "critique_eval": "CRITIQUE_EVAL_MODEL",
