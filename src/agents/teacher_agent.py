@@ -25,29 +25,36 @@ def teacher_explain(
 ) -> str:
     llm = _llm(role="teacher")
     feedback_summary = ""
-    if student_feedback_by_persona:
-        compact = []
+    has_any_feedback = False
+    if student_feedback_by_persona is not None:
+        if not isinstance(student_feedback_by_persona, dict):
+            raise ValueError("student_feedback_by_persona must be a dict.")
+        counts: Dict[str, int] = {}
         for p, fb in student_feedback_by_persona.items():
-            try:
-                if isinstance(fb, dict):
-                    worked = ", ".join(fb.get("worked", [])[:2])
-                    didnt = ", ".join(fb.get("didnt_work", [])[:2])
-                    req = ", ".join(fb.get("requests", [])[:2])
-                    compact.append(f"{p}: +[{worked}] -[{didnt}] req:[{req}]")
-                else:
-                    s = str(fb).strip().replace("\n", " ")
-                    if len(s) > 220:
-                        s = s[:220]
-                    compact.append(f"{p}: {s}")
-            except Exception:
-                compact.append(f"{p}: feedback noted")
-        feedback_summary = " | ".join(compact)
+            if not isinstance(fb, dict):
+                raise ValueError("Each persona's feedback must be an object.")
+            for k in ("requests", "didnt_work", "confusions"):
+                items = fb.get(k)
+                if isinstance(items, list) and items:
+                    has_any_feedback = True
+                    for it in items:
+                        s = str(it).strip()
+                        if not s:
+                            continue
+                        if len(s) > 200:
+                            s = s[:200]
+                        counts[s] = counts.get(s, 0) + 1
+        if counts:
+            ranked = sorted(counts.items(), key=lambda kv: (-kv[1], len(kv[0])))
+            top = [f"{t} (x{c})" for t, c in ranked[:6]]
+            feedback_summary = " | ".join(top)
 
     sys = SystemMessage(
         content=(
             "You are the Teacher Agent. Role: produce a clear, self-contained explanation that "
             "answers the question while covering ALL required topics. On later rounds, revise minimally to "
             "address the latest student feedback and the refreshed topic list; prefer tightening or replacing over adding new material. "
+            "If the latest round has no actionable feedback (all personas returned {}), make no change or at most one micro-clarification. "
             "Output: a single block of prose (no headings, no bullet lists). Aim for concise, structured prose (6-10 sentences). "
             "Include: (1) a short intuitive orientation, (2) the core mechanism step-by-step with a tiny numeric example (at most one), "
             "(3) a brief visual/spatial analogy if helpful, and (4) a short rigorous note (key definitions/equations) where appropriate. "
@@ -61,7 +68,11 @@ def teacher_explain(
         if topics
         else "Topics to cover: overview, key concepts, examples, math/rigor, applications"
     )
-    fb = f"Incorporate feedback: {feedback_summary}" if feedback_summary else ""
+    fb = (
+        f"Top feedback to address (ranked): {feedback_summary}"
+        if feedback_summary
+        else ("No actionable feedback this round." if student_feedback_by_persona is not None and not has_any_feedback else "")
+    )
     hum = HumanMessage(content=f"Question: {question}\n{plan}\n{fb}\nReturn only the explanation text.")
     resp = llm.invoke([sys, hum])
     content = resp.content if isinstance(resp.content, str) else str(resp.content)

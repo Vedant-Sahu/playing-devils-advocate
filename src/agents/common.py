@@ -14,9 +14,9 @@ from langchain_openai import ChatOpenAI
 PERSONAS: List[str] = [
     "advanced",
     "struggling",
-    "visual",
     "practical",
     "theoretical",
+    "skeptical_misconception",
 ]
 
 # Persona behavior guidelines
@@ -30,10 +30,6 @@ PERSONA_GUIDELINES: Dict[str, str] = {
         "You are a Struggling Student. You need concrete examples and scaffolding. You are "
         "confused by jargon and abstract concepts and require step-by-step breakdowns."
     ),
-    "visual": (
-        "You are a Visual/Spatial Learner. You need diagrams, spatial metaphors, and visual "
-        "descriptions and struggle with purely verbal/mathematical explanations."
-    ),
     "practical": (
         "You are a Practical/Applied Learner. You want real-world applications and concrete "
         "use cases and get impatient with pure theory."
@@ -41,6 +37,11 @@ PERSONA_GUIDELINES: Dict[str, str] = {
     "theoretical": (
         "You are a Theoretical/Mathematical Learner. You prefer formal definitions and "
         "mathematical rigor and want proofs/derivations where appropriate."
+    ),
+    "skeptical_misconception": (
+        "You combine a Skeptical Adversary and a Misconception Spotter. You probe logic for failure cases, "
+        "request counterexamples or edge cases, and flag likely misunderstandings or misleading phrasings. "
+        "Prefer precise, testable revision requests that reference exact phrases or steps in the explanation."
     ),
 }
 
