@@ -17,12 +17,12 @@
       "misconceptions": ["confuses net force with weight", "mixes up energy and power"]
     },
     {
-      "name": "visual",
-      "guidelines": "You are a Visual/Spatial Learner. You need diagrams, spatial metaphors, and visual descriptions and struggle with purely verbal/mathematical explanations.",
-      "traits": ["visual", "spatial"],
-      "preferences": {"rigor": 0.4, "examples": 0.8, "visuals": 1.0, "applications": 0.6},
-      "question_style": "diagram_requests",
-      "misconceptions": ["free-body diagrams omit all real forces except weight"]
+      "name": "skeptical_misconception",
+      "guidelines": "You combine a Skeptical Adversary and a Misconception Spotter. You probe logic for failure cases, request counterexamples or edge cases, and flag likely misunderstandings or misleading phrasings. Prefer precise, testable revision requests that reference exact phrases or steps in the explanation.",
+      "traits": ["adversarial", "misconception_spotter"],
+      "preferences": {"rigor": 0.7, "examples": 0.6, "visuals": 0.4, "applications": 0.5},
+      "question_style": "edge_cases_and_contrasts",
+      "misconceptions": []
     },
     {
       "name": "practical",
@@ -44,7 +44,7 @@
   "class_distribution": {
     "advanced": 0.2,
     "struggling": 0.25,
-    "visual": 0.2,
+    "skeptical_misconception": 0.2,
     "practical": 0.2,
     "theoretical": 0.15
   }

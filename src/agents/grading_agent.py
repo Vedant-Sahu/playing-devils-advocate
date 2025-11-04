@@ -114,12 +114,9 @@ def grade_gpqa(quiz: List[Dict[str, Any]], answers_by_persona: Dict[str, Dict[st
             if qid and pred == gold:
                 correct += 1
             jt = str(justifs.get(qid, "")).strip()
-            try:
-                jr = judge_explanation(q.get("stem", ""), jt)
-                overall = float(jr.get("overall", 3.0))
-                j_scores.append(max(0.0, min(1.0, overall / 5.0)))
-            except Exception:
-                j_scores.append(0.5)
+            jr = judge_explanation(q.get("stem", ""), jt)
+            overall = float(jr["overall"])  # judge_explanation guarantees 'overall'
+            j_scores.append(max(0.0, min(1.0, overall / 5.0)))
         correct_frac = (correct / total) if total > 0 else 0.0
         just_mean = (sum(j_scores) / len(j_scores)) if j_scores else 0.0
         score = weight_correctness * correct_frac + (1.0 - weight_correctness) * just_mean
