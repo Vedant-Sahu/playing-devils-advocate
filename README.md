@@ -9,6 +9,8 @@ A multi-agent system where a teacher agent creates educational explanations that
 ## Project Structure
 ```
 playing-devils-advocate/
+├── docs/
+│   └── realted_work.md              # Literature review
 ├── notebooks/
 │   └── main_workflow.ipynb          # LangGraph orchestration
 ├── scripts/

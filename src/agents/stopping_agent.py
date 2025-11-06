@@ -1,8 +1,7 @@
 from __future__ import annotations
-
 from typing import Any, Dict, List
 
-from .common import StopConfig, PERSONAS
+from src.config.agent_config import StopConfig, PERSONAS
 
 
 def stopping_decision(

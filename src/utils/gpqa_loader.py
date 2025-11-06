@@ -36,11 +36,10 @@ class GPQALoader:
     
     def _load_from_cache(self) -> List[Dict]:
         """Load questions from cached JSON file"""
-        # Resolve repo root from this file: src/utils/gpqa_loader.py -> repo root is parents[2]
         base_dir = Path(__file__).resolve().parents[2]
         domain_key = "Physics" if str(self.domain).lower() == "physics" else str(self.domain)
-        cache_file = base_dir / "data" / "cache" / f"{self.subset}_{domain_key}.json"
-        print(cache_file)
+        cache_file = base_dir / "data" / "cache" / f"{self.subset}_{domain_key}_train.json"
+        
         if not cache_file.exists():
             raise FileNotFoundError(
                 f"Cache file not found: {cache_file}\n"

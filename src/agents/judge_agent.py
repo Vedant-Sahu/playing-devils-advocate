@@ -32,9 +32,14 @@ def _load_rubric() -> Dict[str, Any]:
 
 
 @instrument()
-def judge_explanation(question: str, explanation: str, topics: List[str] | None = None) -> Dict[str, Any]:
+def judge_explanation(
+    gpqa_question: Dict[str, Any], 
+    explanation: str, 
+    topics: List[str] | None = None
+) -> Dict[str, Any]:
     rubric = _load_rubric()
     metrics = rubric.get("metrics", ["clarity", "correctness", "completeness", "alignment"])
+    expert_explanation = gpqa_question["explanation"]
     llm = _llm(temperature=0.0, json_mode=True, role="judge")
     metrics_lower = [str(m).strip().lower() for m in metrics]
     metrics_line = ", ".join(metrics_lower)
