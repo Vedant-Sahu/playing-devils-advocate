@@ -33,7 +33,7 @@ def grade_gpqa(
             correct += 1
 
         jt = str(justifs.get(question_id, "")).strip()
-        jr = judge_explanation(gpqa_question.get("question", ""), jt)
+        jr = judge_explanation(gpqa_question, jt)
         overall = float(jr["overall"])  # judge_explanation guarantees 'overall'
 
         j_scores.append(max(0.0, min(1.0, overall / 5.0)))
