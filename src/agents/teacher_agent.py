@@ -177,6 +177,7 @@ def teacher_explain(
     mode: Literal["baseline", "adaptive"] = "adaptive",
     student_feedback: Optional[Dict[str, Dict[str, Any]]] = None,
     word_cap: int = 180,
+    max_tokens: int = 500
 ) -> str:
     """
     Generate an explanation for the given question.
@@ -190,7 +191,7 @@ def teacher_explain(
     Returns:
         Generated explanation text
     """
-    llm = _llm(role="teacher")
+    llm = _llm(role="teacher", max_tokens=max_tokens)
 
     # Build prompts based on mode
     sys, hum = _build_teacher_prompt(mode, question, student_feedback, word_cap)

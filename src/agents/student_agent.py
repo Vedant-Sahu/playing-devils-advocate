@@ -9,7 +9,7 @@ from src.utils.parsing import _extract_json
 def student_respond(persona: str, explanation: str) -> Dict[str, Any]:
     key = persona.lower().strip()
     guide = PERSONA_GUIDELINES.get(key, "You are a student.")
-    llm = _llm(temperature=0.0, json_mode=True, role="student")
+    llm = _llm(temperature=0.0, json_mode=True, role="student", max_tokens=500)
     sys = SystemMessage(
         content=(
             guide
@@ -18,6 +18,8 @@ def student_respond(persona: str, explanation: str) -> Dict[str, Any]:
             " Allowed keys: worked, didnt_work, requests, confusions."
             " For worked/didnt_work/requests/confusions: arrays of up to 2 short items."
             " Each non-empty item must reference an exact phrase or sentence index from the explanation."
+            " Only add feedback if it is necessary for your understanding. You should feel"
+            " comfortable leaving fields empty."
             " If you have nothing to add, return {}."
         )
     )
@@ -68,7 +70,7 @@ def student_answers(
     ) -> Dict[str, Dict[str, str]]:
     key = persona.lower().strip()
     guide = PERSONA_GUIDELINES.get(key, "You are a student.")
-    llm = _llm(temperature=0.0, json_mode=True, role="student")
+    llm = _llm(temperature=0.0, json_mode=True, role="student", max_tokens=500)
     sys = SystemMessage(
         content=(
             guide

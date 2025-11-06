@@ -6,7 +6,8 @@ from pathlib import Path
 
 from langchain.schema import HumanMessage, SystemMessage
 
-from .common import _llm, _extract_json
+from src.config.agent_config import _llm
+from src.utils.parsing import _extract_json
 
 try:
     from trulens.core.otel.instrument import instrument  # type: ignore
@@ -39,8 +40,9 @@ def judge_explanation(
 ) -> Dict[str, Any]:
     rubric = _load_rubric()
     metrics = rubric.get("metrics", ["clarity", "correctness", "completeness", "alignment"])
+    question = gpqa_question['question']
     expert_explanation = gpqa_question["explanation"]
-    llm = _llm(temperature=0.0, json_mode=True, role="judge")
+    llm = _llm(temperature=0.0, json_mode=True, role="judge", max_tokens=500)
     metrics_lower = [str(m).strip().lower() for m in metrics]
     metrics_line = ", ".join(metrics_lower)
     sys = SystemMessage(
@@ -95,10 +97,9 @@ def judge_node(state: Dict[str, Any]) -> Dict[str, Any]:
     enabled = os.getenv("ENABLE_JUDGE", "true").strip().lower() in {"1", "true", "yes", "on"}
     if not enabled:
         return {}
-    question = str(state.get("question", ""))
-    explanation = str(state.get("explanation", ""))
-    topics = state.get("topics") or []
-    result = judge_explanation(question, explanation, topics)
+    gpqa_question = state.get("gpqa_question", "")
+    explanation = state.get("explanation", "")
+    result = judge_explanation(gpqa_question, explanation)
     history = list(state.get("history", []))
     history.append({
         "iteration": state.get("iteration", 0),

@@ -95,7 +95,12 @@ def _model_for_role(role: str | None) -> str:
     return default_model
 
 
-def _llm(temperature: float = 0.2, json_mode: bool = False, role: str | None = None) -> ChatOpenAI:
+def _llm(
+        temperature: float = 0.2, 
+        json_mode: bool = False, 
+        role: str | None = None, 
+        max_tokens: int | None = None
+    ) -> ChatOpenAI:
     """
     Create a configured ChatOpenAI instance.
     
