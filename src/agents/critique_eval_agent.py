@@ -1,13 +1,17 @@
 from __future__ import annotations
-
 from typing import Any, Dict
-
 from langchain.schema import HumanMessage, SystemMessage
 
-from .common import _llm, PERSONAS, _extract_json, PERSONA_GUIDELINES
+from src.config.agent_config import _llm, PERSONAS, PERSONA_GUIDELINES
+from src.utils.parsing import _extract_json
 
 
-def _judge_feedback(persona: str, feedback: Dict[str, Any], question: str | None = None, explanation: str | None = None) -> Dict[str, Any]:
+def _judge_feedback(
+        persona: str, 
+        feedback: Dict[str, Any], 
+        question: str | None = None, 
+        explanation: str | None = None
+    ) -> Dict[str, Any]:
     persona = persona.lower().strip()
     if not isinstance(feedback, dict):
         raise ValueError("feedback must be a dict (structured JSON from student).")
