@@ -6,7 +6,8 @@ which are then critiqued by diverse student agents. The explanations are refined
 iteratively based on student feedback until convergence criteria are met.
 """
 
-from typing import Dict, List, Any, TypedDict
+from typing import Dict, List, Any
+from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, END
 
 from src.agents.teacher_agent import adaptive_teacher_node

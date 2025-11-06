@@ -11,15 +11,13 @@ def grade_gpqa(
         gpqa_question: Dict[str, Any], 
         student_answers: Dict[str, Dict[str, str]], 
         student_justifications: Dict[str, Dict[str, str]], 
-        weight_correctness: float = 0.8
     ) -> Dict[str, Any]:
 
     correct_counts: Dict[str, int] = {}
     scores_by_persona: Dict[str, float] = {}
-    just_scores_by_persona: Dict[str, float] = {}
 
     question_id = str(gpqa_question.get("id"))
-    gold = str(gpqa_question.get("correct", "")).strip().upper()
+    gold = str(gpqa_question.get("correct_answer", "")).strip().upper()
     total = 1 
     
     for persona in PERSONAS:
@@ -33,16 +31,11 @@ def grade_gpqa(
             correct += 1
 
         jt = str(justifs.get(question_id, "")).strip()
-        jr = judge_explanation(gpqa_question.get("question", ""), jt)
-        overall = float(jr["overall"])  # judge_explanation guarantees 'overall'
-
-        j_scores.append(max(0.0, min(1.0, overall / 5.0)))
-        correct_frac = (correct / total) if total > 0 else 0.0
-        just_mean = (sum(j_scores) / len(j_scores)) if j_scores else 0.0
-        score = weight_correctness * correct_frac + (1.0 - weight_correctness) * just_mean
-        correct_counts[persona] = correct
-        scores_by_persona[persona] = score
-        just_scores_by_persona[persona] = just_mean
+        jr = judge_explanation(gpqa_question.get("explanation", ""), jt)
+        score = int(jr["explanation_score"])  # 1-5 integer
+        j_scores.append(max(0.0, min(1.0, score / 5.0)))
+        scores_by_persona[persona] = (sum(j_scores) / len(j_scores)) if j_scores else 0.0
+        correct_counts[persona] = correct 
     
     overall = sum(scores_by_persona.values()) / len(scores_by_persona) if scores_by_persona else 0.0
     
@@ -50,7 +43,6 @@ def grade_gpqa(
         "total_questions": total,
         "correct_counts": correct_counts,
         "scores_by_persona": scores_by_persona,
-        "justification_scores_by_persona": just_scores_by_persona,
         "overall_score": overall,
     }
 

@@ -6,7 +6,8 @@ without student feedback or iterative refinement. Used to measure the value
 added by the adaptive refinement process.
 """
 
-from typing import Dict, List, Any, TypedDict
+from typing import Dict, List, Any
+from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, END
 
 from src.agents.teacher_agent import baseline_teacher_node
