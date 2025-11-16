@@ -96,7 +96,12 @@ def _model_for_role(role: str | None) -> str:
     return default_model
 
 
-def _llm(temperature: float = 1.0, json_mode: bool = False, role: str | None = None) -> ChatOpenAI:
+def _llm(
+        temperature: float = 1.0, 
+        json_mode: bool = False, 
+        role: str | None = None, 
+        max_tokens: int | None = None
+    ) -> ChatOpenAI:
     """
     Create a configured ChatOpenAI instance.
     
@@ -104,11 +109,24 @@ def _llm(temperature: float = 1.0, json_mode: bool = False, role: str | None = N
         temperature: Sampling temperature (0.0-1.0)
         json_mode: Whether to enforce JSON output format
         role: Agent role for model selection
+        max_tokens: Maximum tokens for the model's completion
         
     Returns:
         Configured ChatOpenAI instance
     """
     model = _model_for_role(role)
+
+    # Build common arguments
+    kwargs = {
+        "model": model,
+        "temperature": temperature,
+    }
+
+    # Add max token limit if provided
+    if max_tokens is not None:
+        kwargs["max_completion_tokens"] = max_tokens
+
+    # Add JSON mode formatting if requested
     name = str(model).lower()
     supports_json = (
         name.startswith("gpt-4o")
@@ -117,12 +135,9 @@ def _llm(temperature: float = 1.0, json_mode: bool = False, role: str | None = N
         or name.startswith("o4")
     )
     if json_mode and supports_json:
-        return ChatOpenAI(
-            model=model,
-            temperature=temperature,
-            model_kwargs={"response_format": {"type": "json_object"}},
-        )
-    return ChatOpenAI(model=model, temperature=temperature)
+        kwargs["model_kwargs"] = {"response_format": {"type": "json_object"}}
+
+    return ChatOpenAI(**kwargs)
 
 
 def _load_personas_from_json() -> tuple[list[str] | None, dict[str, str] | None, dict[str, float] | None]:

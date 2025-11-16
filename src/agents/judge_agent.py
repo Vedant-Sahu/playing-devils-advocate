@@ -18,9 +18,9 @@ def judge_explanation(
     if not isinstance(student_explanation, str):
         raise ValueError("student_explanation must be a string.")
     if not student_explanation.strip():
-        return {"explanation_score": 1}
+        return {"explanation_score": 0}
 
-    llm = _llm(temperature=1.0, json_mode=True, role="judge")
+    llm = _llm(temperature=1.0, json_mode=True, role="judge", max_tokens=500)
 
     sys = SystemMessage(
         content=(
