@@ -1,17 +1,15 @@
 from __future__ import annotations
-
 from typing import Any, Dict, List
-
 from langchain.schema import HumanMessage, SystemMessage
-
-from .common import _llm, _extract_json
+from src.config.agent_config import _llm
+from src.utils.parsing import _extract_json
 
 
 def pairwise_judge(
     question: str,
+    expert_explanation: str,
     explanation_a: str,
     explanation_b: str,
-    topics: List[str] | None = None,
     label_a: str = "system",
     label_b: str = "baseline",
 ) -> Dict[str, Any]:
@@ -21,8 +19,6 @@ def pairwise_judge(
         raise ValueError("explanation_a must be a non-empty string.")
     if not isinstance(explanation_b, str) or not explanation_b.strip():
         raise ValueError("explanation_b must be a non-empty string.")
-    if topics is not None and not isinstance(topics, list):
-        raise ValueError("topics must be a list of strings if provided.")
 
     llm = _llm(temperature=1.0, json_mode=True, role="pairwise_judge")
 
@@ -33,6 +29,7 @@ def pairwise_judge(
             "Evaluate on these metrics: "
             + metrics_line
             + ". Choose the better overall explanation. If quality is indistinguishable, return 'tie'. "
+            + " Refer to the expert explanation for the information that a good explanation should contain. "
             "Return ONLY valid JSON of the form {\"winner\": \"A\"|\"B\"|\"tie\", \"rationales\": {<metric>: \"...\"}}. "
             "Rationales must be concise and specific to the texts."
         )
@@ -40,7 +37,7 @@ def pairwise_judge(
 
     payload = {
         "question": question,
-        "topics": topics or [],
+        "expert explanation": expert_explanation,
         "A": {"label": str(label_a), "text": explanation_a},
         "B": {"label": str(label_b), "text": explanation_b},
     }

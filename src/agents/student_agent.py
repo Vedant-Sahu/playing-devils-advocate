@@ -9,15 +9,19 @@ from src.utils.parsing import _extract_json, extract_letter_a_to_d, extract_one_
 def student_respond(persona: str, explanation: str) -> Dict[str, Any]:
     key = persona.lower().strip()
     guide = PERSONA_GUIDELINES.get(key, "You are a student.")
-    llm = _llm(temperature=1.0, json_mode=True, role="student")
+    llm = _llm(temperature=1.0, json_mode=True, role="student", max_tokens=5000)
     sys = SystemMessage(
         content=(
             guide
             + " Provide constructive feedback on the teacher's explanation."
-            " Return ONLY valid JSON. Keys are optional and must be omitted if empty."
+            " Return ONLY with a short valid JSON. Keys are optional and must be omitted if empty."
             " Allowed keys: worked, didnt_work, requests, confusions."
             " For worked/didnt_work/requests/confusions: arrays of up to 2 short items."
             " Each non-empty item must reference an exact phrase or sentence index from the explanation."
+            " Keep each item to less than 50 words. Do NOT exceed this limit."
+            " Do NOT include any extra text, explanation, or commentary"
+            " Only add feedback if it is necessary for your understanding. You should feel"
+            " comfortable leaving fields empty."
             " If you have nothing to add, return {}."
         )
     )
@@ -68,14 +72,17 @@ def student_answers(
     ) -> Dict[str, Dict[str, str]]:
     key = persona.lower().strip()
     guide = PERSONA_GUIDELINES.get(key, "You are a student.")
-    llm = _llm(temperature=0.0, json_mode=True, role="student")
+    llm = _llm(temperature=0.0, json_mode=True, role="student", max_tokens=2000)
     sys = SystemMessage(
         content=(
             guide
-            + " Answer the multiple-choice question(s) strictly using what is conveyed in the teacher's explanation. "
-            + "For each question, select exactly one option A–D and provide a concise justification of 1–3 sentences. "
-            + "Return ONLY JSON of the form {\"answers\": {\"<ID>\": \"A\", ...}, \"justifications\": {\"<ID>\": \"...\", ...}}. "
-            + "Use the exact question ID string(s) printed in the quiz as keys (Do NOT use 'q1')."
+            + " Answer the multiple-choice question strictly using the information in the teacher's explanation. "
+            + "Be careful while solving the question and make sure to check your math and reasoning. "
+            + "For each question, select exactly one option A–D and provide a concise justification of 1–2 sentences. "
+            + "Do NOT exceed more than 100 words for your justification. "
+            + "Do NOT include any extra text, explanation, or commentary. "
+            + "Return ONLY with a short JSON of the form {\"answers\": {\"<ID>\": \"A\", ...}, \"justifications\": {\"<ID>\": \"...\", ...}}. "
+            + "Use the exact question ID as the key (Do NOT use 'q1')."
         )
     )
     quiz_text_lines: list[str] = []
