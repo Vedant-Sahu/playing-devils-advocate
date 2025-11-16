@@ -11,7 +11,7 @@ from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, END
 
 from src.agents.teacher_agent import adaptive_teacher_node
-from src.agents.student_agent import student_critiques_node, student_answers_node
+from src.agents.student_agent import student_critiques_node, single_answer_node
 from src.agents.critique_eval_agent import reward_node
 from src.agents.stopping_agent import stopper_node
 from src.agents.grading_agent import grading_node
@@ -31,8 +31,8 @@ class State(TypedDict, total=False):
     max_iters: int
     decision: str
     reason: str
-    student_answers: Dict[str, Dict[str, str]]
-    student_justifications: Dict[str, Dict[str, str]]
+    single_answer: str
+    single_explanation: str
     quiz_results: Dict[str, Any]
 
 
@@ -60,25 +60,25 @@ def create_adaptive_refinement_graph() -> StateGraph:
     graph.add_node("student critiques", student_critiques_node)
     graph.add_node("reward", reward_node)
     graph.add_node("stopper", stopper_node)
-    graph.add_node("student answers", student_answers_node)
+    graph.add_node("single answer", single_answer_node)
     graph.add_node("grading", grading_node)
     
     # Define edge flow
     graph.add_edge("teacher", "student critiques")
     graph.add_edge("student critiques", "reward")
     graph.add_edge("reward", "stopper")
-    graph.add_edge("student answers", "grading")
+    graph.add_edge("single answer", "grading")
     graph.add_edge("grading", END)
     
     # Conditional routing from stopper
     def route_from_stop(state: State) -> str:
-        """Route to student answers if STOP, otherwise back to teacher for refinement."""
-        return "student answers" if state.get("decision") == "STOP" else "teacher"
+        """Route to single answer if STOP, otherwise back to teacher for refinement."""
+        return "single answer" if state.get("decision") == "STOP" else "teacher"
     
     graph.add_conditional_edges(
         "stopper",
         route_from_stop,
-        {"student answers": "student answers", "teacher": "teacher"}
+        {"single answer": "single answer", "teacher": "teacher"}
     )
     
     # Set entry point

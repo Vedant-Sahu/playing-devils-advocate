@@ -11,7 +11,7 @@ from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, END
 
 from src.agents.teacher_agent import baseline_teacher_node
-from src.agents.student_agent import student_answers_node
+from src.agents.student_agent import single_answer_node
 from src.agents.grading_agent import grading_node
 
 from IPython.display import Image
@@ -23,8 +23,8 @@ class State(TypedDict, total=False):
     explanation: str
     threshold: float
     max_iters: int
-    student_answers: Dict[str, Dict[str, str]]
-    student_justifications: Dict[str, Dict[str, str]]
+    single_answer: str
+    single_explanation: str
     quiz_results: Dict[str, Any]
 
 
@@ -48,12 +48,12 @@ def create_baseline_graph() -> StateGraph:
     
     # Add agent nodes
     graph.add_node("teacher", baseline_teacher_node)
-    graph.add_node("student answers", student_answers_node)
+    graph.add_node("single answer", single_answer_node)
     graph.add_node("grading", grading_node)
     
     # Define edge flow
-    graph.add_edge("teacher", "student answers")
-    graph.add_edge("student answers", "grading")
+    graph.add_edge("teacher", "single answer")
+    graph.add_edge("single answer", "grading")
     graph.add_edge("grading", END)
     
     # Set entry point

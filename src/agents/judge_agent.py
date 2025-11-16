@@ -20,7 +20,7 @@ def judge_explanation(
     if not student_explanation.strip():
         return {"explanation_score": 1}
 
-    llm = _llm(temperature=0.0, json_mode=True, role="judge")
+    llm = _llm(temperature=1.0, json_mode=True, role="judge")
 
     sys = SystemMessage(
         content=(

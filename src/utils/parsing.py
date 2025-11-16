@@ -98,3 +98,62 @@ def _extract_float(text: str) -> float:
         except Exception:
             pass
     return 0.5
+
+
+def extract_letter_a_to_d(text: str) -> str | None:
+    """
+    Try to extract a single multiple-choice letter (A–D) from free-form text.
+    Priority:
+    1) Explicit markers like "Answer: B", "Final answer: C", "Option D", "Choice A"
+    2) Line-start patterns like "B) ..." or "C. ..."
+    3) Parenthetical markers like "(A)"
+    Returns uppercase letter or None if not found.
+    """
+    import re
+    if not isinstance(text, str) or not text.strip():
+        return None
+    t = text.strip()
+    # 1) Explicit markers
+    m = re.search(r"(?i)\b(?:final\s*answer|answer|choice|option)\s*[:\-]?\s*([ABCD])\b", t)
+    if m:
+        return m.group(1).upper()
+    # 2) Line-start patterns (look at first non-empty line)
+    first_line = next((ln for ln in t.splitlines() if ln.strip()), "")
+    m = re.match(r"\s*([ABCD])\s*[)\.\-]\s*", first_line)
+    if m:
+        return m.group(1).upper()
+    # 3) Parenthetical markers anywhere
+    m = re.search(r"\(([ABCD])\)", t)
+    if m:
+        return m.group(1).upper()
+    # 4) Fallback: standalone letter token near the end
+    tokens = re.findall(r"\b([ABCD])\b", t)
+    if tokens:
+        return tokens[-1].upper()
+    return None
+
+
+def extract_one_sentence(text: str) -> str:
+    """
+    Extract a concise single sentence from free-form text.
+    Heuristics:
+    - Remove code fences and excessive whitespace
+    - Use first sentence ending with . ! ? ; fallback to first ~25 words
+    """
+    import re
+    if not isinstance(text, str) or not text.strip():
+        return ""
+    t = text
+    # Remove fenced code blocks
+    t = re.sub(r"```[\s\S]*?```", " ", t)
+    # Collapse whitespace
+    t = " ".join(t.split())
+    # Find first sentence terminator
+    m = re.search(r"(.+?[\.\!\?])\s", t + " ")
+    if m:
+        return m.group(1).strip()
+    # Fallback: first ~25 words
+    words = t.split()
+    if len(words) > 25:
+        return " ".join(words[:25]).rstrip(".,;:!?") + "."
+    return t

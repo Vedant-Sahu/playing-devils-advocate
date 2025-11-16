@@ -87,6 +87,7 @@ def _model_for_role(role: str | None) -> str:
             "coordinator": "COORDINATOR_MODEL",
             "student": "STUDENT_MODEL",
             "critique_eval": "CRITIQUE_EVAL_MODEL",
+            "answerer": "ANSWER_MODEL",
         }.get(role.lower().strip())
         if key:
             v = os.getenv(key)
@@ -95,7 +96,7 @@ def _model_for_role(role: str | None) -> str:
     return default_model
 
 
-def _llm(temperature: float = 0.2, json_mode: bool = False, role: str | None = None) -> ChatOpenAI:
+def _llm(temperature: float = 1.0, json_mode: bool = False, role: str | None = None) -> ChatOpenAI:
     """
     Create a configured ChatOpenAI instance.
     
@@ -108,7 +109,14 @@ def _llm(temperature: float = 0.2, json_mode: bool = False, role: str | None = N
         Configured ChatOpenAI instance
     """
     model = _model_for_role(role)
-    if json_mode:
+    name = str(model).lower()
+    supports_json = (
+        name.startswith("gpt-4o")
+        or name.startswith("gpt-4.1")
+        or name.startswith("o3")
+        or name.startswith("o4")
+    )
+    if json_mode and supports_json:
         return ChatOpenAI(
             model=model,
             temperature=temperature,
