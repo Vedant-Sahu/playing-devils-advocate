@@ -29,7 +29,7 @@ def format_quiz_question(
         seed: Random seed for deterministic option shuffling
         
     Returns:
-        Dict with keys: id, question, options (list of answers), correct (label), explanation
+        Dict with keys: id, question, options (list of answers), correct (label), expert_explanation
     """
     rng = random.Random(seed)
     
@@ -59,7 +59,7 @@ def format_quiz_question(
         "question": question,
         "options": options_text,
         "correct": correct_label,
-        "explanation": explanation
+        "expert_explanation": explanation
     }
 
 

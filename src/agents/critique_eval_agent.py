@@ -18,7 +18,7 @@ def _judge_feedback(
     # Empty feedback -> score 1
     if len(feedback) == 0:
         return {"score": 1, "rationales": {}}
-    llm = _llm(temperature=0.0, json_mode=True, role="critique_eval")
+    llm = _llm(temperature=1.0, json_mode=True, role="critique_eval")
     guide = PERSONA_GUIDELINES.get(persona, "You are a student.")
     sys = SystemMessage(
         content=(

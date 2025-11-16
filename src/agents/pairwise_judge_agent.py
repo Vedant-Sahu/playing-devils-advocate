@@ -24,7 +24,7 @@ def pairwise_judge(
     if topics is not None and not isinstance(topics, list):
         raise ValueError("topics must be a list of strings if provided.")
 
-    llm = _llm(temperature=0.0, json_mode=True, role="pairwise_judge")
+    llm = _llm(temperature=1.0, json_mode=True, role="pairwise_judge")
 
     metrics_line = ", ".join(["clarity", "correctness", "completeness", "alignment", "efficiency"])  # efficiency = avoids unnecessary length
     sys = SystemMessage(
