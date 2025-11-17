@@ -6,62 +6,103 @@ from src.config.agent_config import _llm, PERSONAS, PERSONA_GUIDELINES
 from src.utils.parsing import _extract_json, extract_letter_a_to_d, extract_one_sentence
 
 
-def student_respond(persona: str, explanation: str) -> Dict[str, Any]:
+def student_respond(
+        persona: str,
+        explanation: str,
+        score_history: Optional[List[Dict]] = None
+    ) -> Dict[str, Any]:
+
     key = persona.lower().strip()
     guide = PERSONA_GUIDELINES.get(key, "You are a student.")
+
+    # Build performance context
+    performance_context = ""
+    if score_history and len(score_history) > 0:
+        latest = score_history[-1]
+        performance_context = f"""
+            YOUR PERFORMANCE HISTORY:
+            - Last round score: {latest['score']:.1f}/10 (ranked #{latest['rank']}/5 students)
+            - Your previous issue: "{latest['issue'][:80]}..."
+
+            SCORING SYSTEM:
+            - Base points: Judge evaluates severity of your issue (1-3 points)
+            - Bonus points: Uniqueness (up to 3 points for issues others don't find)
+            - Top 3 students influence the teacher's revision
+            - Bottom 2 students are ignored
+
+            STRATEGY TIPS:
+            - Find genuinely critical flaws (high severity)
+            - Look for issues other students might miss (uniqueness bonus)
+            - Be specific and cite exact quotes
+            - If you ranked low last round, try a different angle
+            """
+    else:
+        performance_context = """
+            SCORING SYSTEM:
+            - Independent judge evaluates how critical your issue is (1-3 severity points)
+            - You earn bonus points for finding unique issues others miss (up to 3 points)
+            - Only top 3 students' feedback reaches the teacher
+            - Competition is fierce - make your critique count!
+            """
+    
     llm = _llm(temperature=1.0, json_mode=True, role="student", max_tokens=5000)
+    
     sys = SystemMessage(
         content=(
             guide
-            + " Provide constructive feedback on the teacher's explanation."
-            " Return ONLY with a short valid JSON. Keys are optional and must be omitted if empty."
-            " Allowed keys: worked, didnt_work, requests, confusions."
-            " For worked/didnt_work/requests/confusions: arrays of up to 2 short items."
-            " Each non-empty item must reference an exact phrase or sentence index from the explanation."
-            " Keep each item to less than 50 words. Do NOT exceed this limit."
-            " Do NOT include any extra text, explanation, or commentary"
-            " Only add feedback if it is necessary for your understanding. You should feel"
-            " comfortable leaving fields empty."
-            " If you have nothing to add, return {}."
+            + "\n\nYour task: Identify the SINGLE MOST IMPORTANT issue with this explanation.\n"
+            " Focus on problems that would confuse students or create misconceptions.\n\n"
+            " Return a JSON object with:\n"
+            " - 'issue': Brief description of the main problem (max 100 words)\n"
+            " - 'quote': Exact phrase from explanation that demonstrates the issue\n\n"
+            " If the explanation is genuinely good with no significant issues, return:\n"
+            " {'issue': null, 'severity': 0, 'quote': null}\n\n"
+            " DO NOT rate severity yourself - independent judges will evaluate that.\n"
+            " DO NOT provide generic praise or multiple small issues.\n"
+            " Focus on finding the most important issue you can identify.\n"
         )
     )
+    
     hum = HumanMessage(content=f"Explanation:\n{explanation}")
     resp = llm.invoke([sys, hum])
     raw = resp.content
     parsed = raw if isinstance(raw, dict) else _extract_json(raw if isinstance(raw, str) else str(raw))
+    
+    # Validation
     if not isinstance(parsed, dict):
         raise ValueError("Student feedback must be a JSON object.")
-    allowed = {"worked","didnt_work","requests","confusions"}
-    extra_keys = set(parsed.keys()) - allowed
-    if extra_keys:
-        raise ValueError(f"Unexpected keys in student feedback: {sorted(extra_keys)}")
-    result: Dict[str, Any] = {}
-    def _clean_list(name: str) -> None:
-        v = parsed.get(name)
-        if v is None:
-            return
-        if not isinstance(v, list):
-            raise ValueError(f"{name} must be a list if provided.")
-        items = [str(x).strip() for x in v if str(x).strip()]
-        if not items:
-            return
-        result[name] = items[:2]
-    for k in ["worked","didnt_work","requests","confusions"]:
-        _clean_list(k)
-    # Best-effort normalization to a single line/paragraph
-    return result
+    
+    required_keys = {"issue", "quote"}
+    if set(parsed.keys()) != required_keys:
+        raise ValueError(f"Expected keys {required_keys}, got {set(parsed.keys())}")
+    
+    # Return normalized format
+    return {
+        "persona": persona,
+        "issue": parsed.get("issue"),
+        "quote": parsed.get("quote")
+    }
 
 
 def student_critiques_node(state: Dict[str, Any]) -> Dict[str, Any]:
+    """All students provide their top issue"""
+    
     explanation = state.get("explanation")
     if not isinstance(explanation, str) or not explanation.strip():
         raise ValueError("explanation is required in state for students_node.")
+    
+    # Get score history for each student
+    score_history = state.get("student_score_history", {})
+
     responses: Dict[str, Any] = {}
+    
     for p in PERSONAS:
-        fb = student_respond(p, explanation)
+        persona_history = score_history.get(p, [])
+        fb = student_respond(p, explanation, persona_history)
         if not isinstance(fb, dict):
             raise ValueError(f"student_respond must return an object for persona '{p}'.")
         responses[p] = fb
+    
     return {"student_responses": responses}
 
 

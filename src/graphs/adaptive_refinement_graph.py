@@ -25,6 +25,9 @@ class State(TypedDict, total=False):
     explanation: str
     student_responses: Dict[str, str]
     reward_scores: Dict[str, int]
+    student_score_history: Dict[str, List[Dict]]
+    filtered_critiques: str
+    critique_rankings: List[Dict[str, Any]]
     history: List[Dict]
     iteration: int
     threshold: float
