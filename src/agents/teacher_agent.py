@@ -23,8 +23,8 @@ except Exception:  # pragma: no cover
 def _build_teacher_prompt(
     mode: Literal["baseline", "adaptive"],
     question: str,
-    student_feedback: Optional[Dict[str, Dict[str, Any]]] = None,
-    word_cap: int = 180,
+    student_feedback: Optional[str] = None,
+    word_cap: int = 300,
 ) -> tuple[SystemMessage, HumanMessage]:
     """
     Build system and human messages for the teacher agent based on mode.
@@ -62,9 +62,8 @@ def _build_teacher_prompt(
         )
         
     else:  
-        # Few-shot with refinement: Include example and process feedback
-        feedback_summary = _process_feedback(student_feedback)
-        has_feedback = bool(feedback_summary)
+        # Few-shot with refinement: Include example and feedback from reward node
+        has_feedback = bool(student_feedback and student_feedback.strip())
         
         sys = SystemMessage(
             content=(
@@ -73,9 +72,11 @@ def _build_teacher_prompt(
                 "Role: Produce a clear, self-contained explanation that helps students understand " 
                 "the given question and its underlying concepts. "
                 "On first iteration, create a well-structured explanation covering key concepts. "
-                "On later rounds, revise based on student feedback. Prefer tightening, clarifying, "
-                "or replacing over adding new material. "
-                "If feedback is empty (all personas returned {}), make no change. "
+                "On later rounds, you will receive feedback from the TOP-RANKED student critiques "
+                "(only the most important issues identified by independent judges). "
+                "Revise based on this feedback. Prefer tightening, clarifying, or replacing over "
+                "adding new material. "
+                "If feedback indicates 'No significant issues', make minimal changes or none. "
                 "\n\n"
                 "Output format: Single block of prose (no headings, no bullet lists). "
                 "Aim for concise, structured prose (6-10 sentences). Include: "
@@ -114,9 +115,9 @@ def _build_teacher_prompt(
         
         # Build human message with optional feedback
         if has_feedback:
-            fb_text = f"\nStudent feedback to address (ranked by frequency):\n{feedback_summary}"
+            fb_text = f"\n\nStudent feedback (top-ranked critiques only):\n{student_feedback}"
         else:
-            fb_text = "\nNo actionable feedback this round." if student_feedback is not None else ""
+            fb_text = "\n\nNo significant issues identified in previous iteration."
         
         hum = HumanMessage(
             content=f"Question: {question}{fb_text}\n\nProvide the explanation."
@@ -125,59 +126,13 @@ def _build_teacher_prompt(
     return sys, hum
 
 
-def _process_feedback(
-    student_feedback: Optional[Dict[str, Dict[str, Any]]]
-) -> str:
-    """
-    Process and rank student feedback by frequency.
-    
-    Args:
-        student_feedback: Dict mapping persona names to feedback dicts
-        
-    Returns:
-        Formatted string with top feedback items, or empty string if none
-    """
-    if not student_feedback or not isinstance(student_feedback, dict):
-        return ""
-    
-    counts: Dict[str, int] = {}
-    
-    for persona, fb in student_feedback.items():
-        if not isinstance(fb, dict):
-            continue
-            
-        # Aggregate feedback from all categories
-        for category in ("requests", "didnt_work", "confusions"):
-            items = fb.get(category)
-            if isinstance(items, list) and items:
-                for item in items:
-                    s = str(item).strip()
-                    if not s:
-                        continue
-                    # Truncate very long feedback
-                    if len(s) > 200:
-                        s = s[:200]
-                    counts[s] = counts.get(s, 0) + 1
-    
-    if not counts:
-        return ""
-    
-    # Rank by frequency, then by length (shorter first)
-    ranked = sorted(counts.items(), key=lambda kv: (-kv[1], len(kv[0])))
-    
-    # Take top 6 items
-    top_items = [f"• {text} (x{count})" for text, count in ranked[:6]]
-    
-    return "\n".join(top_items)
-
-
 @instrument()
 def teacher_explain(
     question: str,
     mode: Literal["baseline", "adaptive"] = "adaptive",
-    student_feedback: Optional[Dict[str, Dict[str, Any]]] = None,
-    word_cap: int = 180,
-    max_tokens: int = 500
+    student_feedback: Optional[str] = None,
+    word_cap: int = 300,
+    max_tokens: int = 5000
 ) -> str:
     """
     Generate an explanation for the given question.
@@ -216,7 +171,7 @@ def adaptive_teacher_node(state: Dict[str, Any]) -> Dict[str, Any]:
     Uses adaptive mode with student feedback for iterative improvement.
     Extracts question from gpqa_question in state.
     """
-    iteration = int(state.get("iteration", 0)) + 1
+    iteration = int(state.get("iteration", 0))
 
     # Extract question from gpqa_question
     gpqa_question = state.get("gpqa_question", [])
@@ -224,21 +179,18 @@ def adaptive_teacher_node(state: Dict[str, Any]) -> Dict[str, Any]:
         raise ValueError("gpqa_question not found in state")
     question = gpqa_question.get("question", "")
     
-    # Get feedback from previous iteration
-    last_feedback = None
-    history = state.get("history", [])
-    if history:
-        last_feedback = history[-1].get("student_responses")
+    # Get filtered feedback from previous iteration
+    filtered_feedback = state.get("filtered_critiques", "")
     
     # Generate explanation in adaptive mode
     explanation = teacher_explain(
         question=question,
         mode="adaptive",
-        student_feedback=last_feedback,
-        word_cap=180
+        student_feedback=filtered_feedback,
+        word_cap=300
     )
     
-    return {"explanation": explanation, "iteration": iteration}
+    return {"explanation": explanation, "iteration": iteration + 1}
 
 
 def baseline_teacher_node(state: Dict[str, Any]) -> Dict[str, Any]:
@@ -259,7 +211,7 @@ def baseline_teacher_node(state: Dict[str, Any]) -> Dict[str, Any]:
         question=question,
         mode="baseline",
         student_feedback=None,
-        word_cap=180
+        word_cap=300
     )
     
     return {"explanation": explanation, "iteration": 1}
