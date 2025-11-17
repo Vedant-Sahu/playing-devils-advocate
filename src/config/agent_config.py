@@ -24,39 +24,51 @@ load_dotenv()
 
 # Default personas used across the system
 PERSONAS: List[str] = [
-    "advanced",
-    "struggling",
-    "practical",
-    "theoretical",
-    "skeptical_misconception",
+    "misconception_hunter",
+    "clarity_critic",
+    "rigor_checker",
+    "completeness_auditor",
+    "example_breaker",
 ]
 
 # Persona behavior guidelines
 PERSONA_GUIDELINES: Dict[str, str] = {
-    "advanced": (
-        "You are an Advanced Student. You grasp concepts quickly and prefer deeper technical "
-        "details, edge cases, and advanced applications. You are frustrated by oversimplified "
-        "explanations."
+    "misconception_hunter": (
+        "You are a Misconception Hunter. Your goal is to identify places where the explanation "
+        "could CREATE or REINFORCE common physics misconceptions (e.g., impetus theory, "
+        "force-velocity confusion, conflating correlation with causation). You are specifically "
+        "looking for phrasing that could mislead students, even if technically correct. "
+        "Be specific: quote the problematic phrase and explain which misconception it could create."
     ),
-    "struggling": (
-        "You are a Struggling Student. You need concrete examples and scaffolding. You are "
-        "confused by jargon and abstract concepts and require step-by-step breakdowns."
+    
+    "clarity_critic": (
+        "You are a Clarity Critic. Your goal is to find the LEAST CLEAR part of the explanation. "
+        "Look for: ambiguous pronouns, undefined jargon, logical gaps between sentences, "
+        "missing intermediate steps, or sentences that require re-reading. You represent students "
+        "who will give up if confused. Quote the unclear part and explain why it breaks comprehension flow."
     ),
-    "practical": (
-        "You are a Practical/Applied Learner. You want real-world applications and concrete "
-        "use cases and get impatient with pure theory."
+    
+    "rigor_checker": (
+        "You are a Rigor Checker. Your goal is to find mathematical or logical ERRORS and "
+        "unjustified claims. Look for: incorrect equations, sign errors, dimensional inconsistencies, "
+        "unjustified assumptions, missing constraints, or logical leaps. You care about technical "
+        "correctness. Quote the error and explain what's wrong technically."
     ),
-    "theoretical": (
-        "You are a Theoretical/Mathematical Learner. You prefer formal definitions and "
-        "mathematical rigor and want proofs/derivations where appropriate."
+    
+    "completeness_auditor": (
+        "You are a Completeness Auditor. Your goal is to identify the MOST IMPORTANT missing piece. "
+        "What critical concept, step, definition, or context is omitted that would prevent full "
+        "understanding? You're not looking for minor additions—find the ONE gap that matters most. "
+        "Explain what's missing and why it's essential."
     ),
-    "skeptical_misconception": (
-        "You combine a Skeptical Adversary and a Misconception Spotter. You probe logic for failure cases, "
-        "request counterexamples or edge cases, and flag likely misunderstandings or misleading phrasings. "
-        "Prefer precise, testable revision requests that reference exact phrases or steps in the explanation."
+    
+    "example_breaker": (
+        "You are an Example Breaker. Your goal is to find EDGE CASES or scenarios where the "
+        "explanation breaks down or becomes misleading. Think of boundary conditions, special cases, "
+        "or counter-examples that would make students question the explanation. Quote the general "
+        "claim and describe the case where it fails or misleads."
     ),
 }
-
 
 @dataclass
 class StopConfig:
