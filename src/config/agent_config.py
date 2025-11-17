@@ -122,8 +122,9 @@ def _llm(
         "temperature": temperature,
     }
 
-    # Add max token limit if provided
-    if max_tokens is not None:
+    # Add max token limit if provided, unless disabled via env switch
+    _disable_max = str(os.getenv("DISABLE_MAX_TOKENS", "")).strip().lower() in ("1", "true", "yes", "on")
+    if (not _disable_max) and max_tokens is not None:
         kwargs["max_completion_tokens"] = max_tokens
 
     # Add JSON mode formatting if requested
