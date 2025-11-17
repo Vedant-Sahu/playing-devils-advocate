@@ -31,6 +31,22 @@ def student_respond(persona: str, explanation: str) -> Dict[str, Any]:
     parsed = raw if isinstance(raw, dict) else _extract_json(raw if isinstance(raw, str) else str(raw))
     if not isinstance(parsed, dict):
         raise ValueError("Student feedback must be a JSON object.")
+    if "request" in parsed:
+        req = parsed.pop("request")
+        existing = parsed.get("requests")
+        merged = []
+        if isinstance(existing, list):
+            merged.extend(existing)
+        elif isinstance(existing, str) and existing.strip():
+            merged.append(existing.strip())
+        elif existing is not None and str(existing).strip():
+            merged.append(str(existing).strip())
+        if isinstance(req, list):
+            merged.extend([str(x).strip() for x in req if str(x).strip()])
+        elif req is not None and str(req).strip():
+            merged.append(str(req).strip())
+        if merged:
+            parsed["requests"] = merged
     allowed = {"worked","didnt_work","requests","confusions"}
     extra_keys = set(parsed.keys()) - allowed
     if extra_keys:
