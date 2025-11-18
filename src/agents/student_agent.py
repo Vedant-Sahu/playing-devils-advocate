@@ -199,6 +199,9 @@ def student_answers_node(state: Dict[str, Any]) -> Dict[str, Any]:
 def single_answer(explanation: str, gpqa_question: Dict[str, Any]) -> Dict[str, str]:
     llm = _llm(temperature=1.0, json_mode=True, role="answerer")
     sys = SystemMessage(content=(
+        "Use ONLY the information from the Teacher explanation provided below to answer the question. "
+        "Do NOT use outside knowledge, prior memory, or unstated assumptions. If the explanation is insufficient, "
+        "choose the best answer strictly based on that explanation. "
         "Return ONLY valid JSON with keys 'answer' and 'explanation'. "
         "Constraints: 'answer' must be exactly one of ['A','B','C','D'] (uppercase). "
         "'explanation' must be a single sentence."
@@ -258,10 +261,12 @@ def single_answer(explanation: str, gpqa_question: Dict[str, Any]) -> Dict[str, 
     if letter not in {"A","B","C","D"}:
         enforce_llm = _llm(temperature=0.0, json_mode=False, role="answerer")
         enforce_sys = SystemMessage(content=(
-            "Return ONLY a single capital letter among A, B, C, D for the question below. No punctuation or explanation."
+            "Use ONLY the Teacher explanation provided below. Return ONLY a single capital letter among A, B, C, D for the question. "
+            "No punctuation or explanation."
         ))
         enforce_hum = HumanMessage(content=(
-            "Question: " + qstem + "\n"
+            "Teacher explanation (context):\n" + str(explanation) + "\n\n"
+            + "Question: " + qstem + "\n"
             + "Options:\n" + options_text + "\n"
         ))
         enforce_resp = enforce_llm.invoke([enforce_sys, enforce_hum])
