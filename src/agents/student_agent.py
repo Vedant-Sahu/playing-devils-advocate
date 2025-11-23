@@ -56,7 +56,7 @@ def student_respond(
             " - 'issue': Brief description of the main problem (max 100 words)\n"
             " - 'quote': Exact phrase from explanation that demonstrates the issue\n\n"
             " If the explanation is genuinely good with no significant issues, return:\n"
-            " {'issue': null, 'severity': 0, 'quote': null}\n\n"
+            " {'issue': null, 'quote': null}\n\n"
             " DO NOT rate severity yourself - independent judges will evaluate that.\n"
             " DO NOT provide generic praise or multiple small issues.\n"
             " Focus on finding the most important issue you can identify.\n"
