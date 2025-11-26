@@ -10,6 +10,10 @@ from typing import Any, Dict, List, Optional, Literal
 from langchain.schema import HumanMessage, SystemMessage
 
 from src.config.agent_config import _llm
+from src.dspy_pipeline.manager import (
+    run_dspy_teacher_pass,
+    should_use_dspy_teacher_backend,
+)
 
 try:
     from trulens.core.otel.instrument import instrument  # type: ignore
@@ -178,10 +182,19 @@ def adaptive_teacher_node(state: Dict[str, Any]) -> Dict[str, Any]:
     if not gpqa_question:
         raise ValueError("gpqa_question not found in state")
     question = gpqa_question.get("question", "")
-    
+
+    if should_use_dspy_teacher_backend():
+        result = run_dspy_teacher_pass(gpqa_question, teacher_persona="general")
+        explanation = result.get("refined_explanation") or result.get("initial_explanation", "")
+        return {
+            "explanation": explanation,
+            "iteration": iteration + 1,
+            "dspy_payload": result,
+        }
+
     # Get filtered feedback from previous iteration
     filtered_feedback = state.get("filtered_critiques", "")
-    
+
     # Generate explanation in adaptive mode
     explanation = teacher_explain(
         question=question,
