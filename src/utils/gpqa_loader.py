@@ -14,31 +14,43 @@ import random
 class GPQALoader:
     """Load GPQA physics questions from cache"""
     
-    def __init__(self, subset: str = "gpqa_main", domain: str = "Physics"):
+    def __init__(
+        self,
+        subset: str = "gpqa_main",
+        domain: str = "Physics",
+        custom_cache_file: str | None = None,
+    ):
         """
         Initialize GPQA loader.
         
         Args:
             subset: One of 'gpqa_main', 'gpqa_extended', or 'gpqa_diamond'
             domain: Domain filter (default: 'Physics')
+            custom_cache_file: Path to custom curated dataset (optional)
         
         Raises:
             FileNotFoundError: If cache file doesn't exist
             ValueError: If subset is invalid
         """
-        valid_subsets = ["gpqa_main", "gpqa_extended", "gpqa_diamond"]
-        if subset not in valid_subsets:
-            raise ValueError(f"Invalid subset. Must be one of {valid_subsets}")
-        
         self.subset = subset
         self.domain = domain
+        self.custom_cache_file = custom_cache_file
+
+        if not custom_cache_file:
+            valid_subsets = ["gpqa_main", "gpqa_extended", "gpqa_diamond"]
+            if subset not in valid_subsets:
+                raise ValueError(f"Invalid subset. Must be one of {valid_subsets}")
+
         self.questions = self._load_from_cache()
     
     def _load_from_cache(self) -> List[Dict]:
         """Load questions from cached JSON file"""
-        base_dir = Path(__file__).resolve().parents[2]
-        domain_key = "Physics" if str(self.domain).lower() == "physics" else str(self.domain)
-        cache_file = base_dir / "data" / "cache" / f"{self.subset}_{domain_key}_train.json"
+        if self.custom_cache_file:
+            cache_file = Path(self.custom_cache_file)
+        else:
+            base_dir = Path(__file__).resolve().parents[2]
+            domain_key = "Physics" if str(self.domain).lower() == "physics" else str(self.domain)
+            cache_file = base_dir / "data" / "cache" / f"{self.subset}_{domain_key}_train.json"
         
         if not cache_file.exists():
             raise FileNotFoundError(
