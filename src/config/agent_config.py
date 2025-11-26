@@ -190,15 +190,11 @@ def _load_personas_from_json() -> tuple[list[str] | None, dict[str, str] | None,
 
 
 # Load personas from JSON if available, otherwise use defaults
-_p, _g, _dist = _load_personas_from_json()
-if _p:
-    PERSONAS = _p
-if _g:
-    PERSONA_GUIDELINES.update({k: v for k, v in _g.items() if v})
+# _p, _g, _dist = _load_personas_from_json()
+# if _p:
+#     PERSONAS = _p
+# if _g:
+#     PERSONA_GUIDELINES.update({k: v for k, v in _g.items() if v})
 
 # Class distribution for weighted sampling (uniform by default)
-CLASS_DISTRIBUTION: Dict[str, float] = (
-    {p: 1.0 / len(PERSONAS) for p in PERSONAS} 
-    if not _dist 
-    else {str(k): float(v) for k, v in _dist.items() if str(k) in PERSONAS}
-)
+CLASS_DISTRIBUTION: Dict[str, float] = {p: 1.0 / len(PERSONAS) for p in PERSONAS} 
