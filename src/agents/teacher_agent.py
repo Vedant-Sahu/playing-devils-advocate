@@ -27,6 +27,7 @@ except Exception:  # pragma: no cover
 def _build_teacher_prompt(
     mode: Literal["baseline", "adaptive"],
     question: str,
+    correct_answer: Optional[str] = None,
     student_feedback: Optional[str] = None,
     word_cap: int = 300,
 ) -> tuple[SystemMessage, HumanMessage]:
@@ -36,12 +37,19 @@ def _build_teacher_prompt(
     Args:
         mode: "baseline" for zero-shot, "adaptive" for few-shot with refinement
         question: The question to explain
+        correct_answer: The correct answer (for guidance, not to reveal)
         student_feedback: Feedback from student personas (adaptive mode only)
         word_cap: Maximum word count for explanation
         
     Returns:
         Tuple of (system_message, human_message)
     """
+    # Common answer context for both modes
+    if correct_answer:
+        answer_context = f"\n\nCorrect answer (for your guidance only - DO NOT reveal): {correct_answer}"
+    else:
+        answer_context = ""
+
     if mode == "baseline":
         # Zero-shot: No examples, no feedback, pure explanation
         sys = SystemMessage(
@@ -50,6 +58,16 @@ def _build_teacher_prompt(
                 "varying skills and backgrounds. Your goal is to provide a clear, accurate "
                 "explanation that helps students understand the given question and its "
                 "underlying concepts. "
+
+                "ANSWER AWARENESS: You have access to the correct answer to guide your "
+                "explanation toward relevant concepts. Use this to focus on concepts "
+                "actually needed to solve this problem. "
+                
+                "CRITICAL CONSTRAINTS:\n"
+                "- NEVER directly state the correct answer letter or value\n"
+                "- NEVER use specific numbers from the question in your examples\n"
+                "- Teach the underlying concepts generically so students must apply them\n\n"
+
                 f"Provide a concise explanation (maximum {word_cap} words) that includes: "
                 "(1) the key concepts needed to understand the question, "
                 "(2) a step-by-step explanation of the core mechanism, "
@@ -62,7 +80,7 @@ def _build_teacher_prompt(
             )
         )
         hum = HumanMessage(
-            content=f"Question: {question}\n\nProvide a clear explanation."
+            content=f"Question: {question}{answer_context}\n\nProvide a clear explanation."
         )
         
     else:  
@@ -73,6 +91,19 @@ def _build_teacher_prompt(
             content=(
                 "You are the Teacher Agent in an adaptive learning system. You are teaching "
                 "undergraduate Physics students with varying skills and backgrounds. "
+
+                "ANSWER AWARENESS: You have access to the correct answer to guide your "
+                "explanation toward relevant concepts. Use this to:\n"
+                "- Focus on concepts actually needed to solve this problem\n"
+                "- Evaluate whether student feedback is leading toward or away from solution\n"
+                "- Maintain accuracy when refining based on feedback\n"
+                "- Ignore feedback that misunderstands the core physics\n\n"
+                
+                "CRITICAL CONSTRAINTS:\n"
+                "- NEVER directly state the correct answer letter or value\n"
+                "- NEVER use specific numbers from the question in your examples\n"
+                "- Teach the underlying concepts generically so students must apply them\n\n"
+
                 "Role: Produce a clear, self-contained explanation that helps students understand " 
                 "the given question and its underlying concepts. "
                 "On first iteration, create a well-structured explanation covering key concepts. "
@@ -80,10 +111,13 @@ def _build_teacher_prompt(
                 "(only the most important issues identified by independent judges). "
                 "Revise based on this feedback. Prefer tightening, clarifying, or replacing over "
                 "adding new material. "
-                "If feedback indicates 'No significant issues', make minimal changes or none. "
-                "\n\n"
-                "Output format: Single block of prose (no headings, no bullet lists). "
-                "Aim for concise, structured prose (6-10 sentences). Include: "
+                "IGNORE feedback that:\n"
+                "- Focuses on tangential topics not needed for the solution\n"
+                "- Misunderstands the core physics principles\n"
+                "- Requests information that would give away the answer\n\n"
+                
+                f"Output format: Single block of prose (no headings). Aim for {word_cap} words. "
+                "Include: "
                 "(1) short intuitive orientation, "
                 "(2) core mechanism step-by-step with a tiny numeric example (at most one), "
                 "(3) brief visual/spatial analogy if helpful, " 
@@ -124,7 +158,7 @@ def _build_teacher_prompt(
             fb_text = "\n\nNo significant issues identified in previous iteration."
         
         hum = HumanMessage(
-            content=f"Question: {question}{fb_text}\n\nProvide the explanation."
+            content=f"Question: {question}{answer_context}{fb_text}\n\nProvide the explanation."
         )
     
     return sys, hum
@@ -132,8 +166,9 @@ def _build_teacher_prompt(
 
 @instrument()
 def teacher_explain(
-    question: str,
     mode: Literal["baseline", "adaptive"] = "adaptive",
+    question: str,
+    correct_answer: Optional[str] = None,
     student_feedback: Optional[str] = None,
     word_cap: int = 300,
     max_tokens: int = 5000
@@ -142,8 +177,9 @@ def teacher_explain(
     Generate an explanation for the given question.
     
     Args:
-        question: The question to explain
         mode: "baseline" for zero-shot or "adaptive" for iterative refinement
+        question: The question to explain
+        correct_answer: The correct answer (for guidance, not to reveal)
         student_feedback: Feedback from student personas (adaptive mode only)
         word_cap: Maximum word count for explanation
         
@@ -153,7 +189,7 @@ def teacher_explain(
     llm = _llm(role="teacher", max_tokens=max_tokens)
 
     # Build prompts based on mode
-    sys, hum = _build_teacher_prompt(mode, question, student_feedback, word_cap)
+    sys, hum = _build_teacher_prompt(mode, question, correct_answer, student_feedback, word_cap)
 
     # Generate explanation
     resp = llm.invoke([sys, hum])
@@ -182,6 +218,7 @@ def adaptive_teacher_node(state: Dict[str, Any]) -> Dict[str, Any]:
     if not gpqa_question:
         raise ValueError("gpqa_question not found in state")
     question = gpqa_question.get("question", "")
+    correct_answer = gpqa_question.get("correct_answer","")
 
     if should_use_dspy_teacher_backend():
         result = run_dspy_teacher_pass(gpqa_question, teacher_persona="general")
@@ -197,8 +234,9 @@ def adaptive_teacher_node(state: Dict[str, Any]) -> Dict[str, Any]:
 
     # Generate explanation in adaptive mode
     explanation = teacher_explain(
-        question=question,
         mode="adaptive",
+        question=question,
+        correct_answer=correct_answer,
         student_feedback=filtered_feedback,
         word_cap=300
     )
@@ -218,11 +256,13 @@ def baseline_teacher_node(state: Dict[str, Any]) -> Dict[str, Any]:
     if not gpqa_question:
         raise ValueError("gpqa_question not found in state")
     question = gpqa_question.get("question", "")
+    correct_answer = gpqa_question.get("correct_answer", "")
     
     # Generate explanation in baseline (zero-shot) mode
     explanation = teacher_explain(
-        question=question,
         mode="baseline",
+        question=question,
+        correct_answer=correct_answer,
         student_feedback=None,
         word_cap=300
     )
