@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Any, Dict
-from langchain.schema import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 import difflib
 
 from src.config.agent_config import _llm, PERSONAS, PERSONA_GUIDELINES
