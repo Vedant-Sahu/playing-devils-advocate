@@ -96,10 +96,10 @@ class EvaluationPipeline:
                 "question_id": gpqa_question["id"],
                 "predicted": predicted,
                 "is_correct": is_correct,
-                "explanation_one_liner": explanation,
+                "answer_reasoning": explanation,
             },
             "overall_score": 1.0 if is_correct else 0.0,
-            "explanation": None  # No detailed explanation for zero-shot
+            "teacher_explanation": None  # No detailed explanation for zero-shot
         }
     
     def run_baseline(
@@ -127,9 +127,9 @@ class EvaluationPipeline:
             "quiz_results": quiz_results,
             "overall_score": 1.0 if is_correct else 0.0,
             "is_correct": is_correct,
-            "explanation": baseline_results.get("explanation", ""),
+            "teacher_explanation": baseline_results.get("explanation", ""),
             "single_answer": baseline_results.get("single_answer", ""),
-            "single_explanation": baseline_results.get("single_explanation", "")
+            "answer_reasoning": baseline_results.get("single_explanation", "")
         }
     
     def run_adaptive(
@@ -158,9 +158,9 @@ class EvaluationPipeline:
             "quiz_results": quiz_results,
             "overall_score": 1.0 if is_correct else 0.0,
             "is_correct": is_correct,
-            "explanation": adaptive_results.get("explanation", ""),
+            "teacher_explanation": adaptive_results.get("explanation", ""),
             "single_answer": adaptive_results.get("single_answer", ""),
-            "single_explanation": adaptive_results.get("single_explanation", ""),
+            "answer_reasoning": adaptive_results.get("single_explanation", ""),
             "iterations": adaptive_results.get("iteration", 0),
             "final_scores": adaptive_results.get("reward_scores", {}),
             "history": adaptive_results.get("history", [])
@@ -239,15 +239,15 @@ class EvaluationPipeline:
                         "quiz_performance": baseline_result["quiz_results"],
                         "overall_score": baseline_result["overall_score"],
                         "predicted": baseline_result.get("single_answer", "?"),
-                        "explanation": baseline_result["explanation"],
-                        "single_explanation": baseline_result.get("single_explanation", "")
+                        "teacher_explanation": baseline_result["teacher_explanation"],
+                        "answer_reasoning": baseline_result.get("answer_reasoning", "")
                     },
                     "adaptive": {
                         "quiz_performance": adaptive_result["quiz_results"],
                         "overall_score": adaptive_result["overall_score"],
                         "predicted": adaptive_result.get("single_answer", "?"),
-                        "explanation": adaptive_result["explanation"],
-                        "single_explanation": adaptive_result.get("single_explanation", ""),
+                        "teacher_explanation": adaptive_result["teacher_explanation"],
+                        "answer_reasoning": adaptive_result.get("answer_reasoning", ""),
                         "iterations": adaptive_result.get("iterations", 0),
                         "final_scores": adaptive_result.get("final_scores", {})
                     }
@@ -289,6 +289,11 @@ class EvaluationPipeline:
         
         output_file = self.results_dir / f"eval_{timestamp}.json"
         output_file.write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        # Run pairwise judgment if requested
+        if run_pairwise_judgment:
+            judge_results = self._pairwise_judgment(question_results, timestamp)
+            results["pairwise_judgment"] = judge_results
         
         # Print summary
         self._print_summary(summary)
@@ -377,22 +382,22 @@ class EvaluationPipeline:
         print(f"\nAdaptive System:")
         print(f"  Average Iterations: {summary['adaptive_metrics']['average_iterations']:.1f}")
 
-    def extract_explanations_for_pairwise_judge(self, eval_results_file: Path) -> Dict[str, Any]:
+
+    def _pairwise_judgment(
+            self, 
+            question_results: List[Dict[str, Any]], 
+            timestamp: str
+        ) -> Dict[str, Any]:
         """
-        Extract baseline and adaptive explanations from evaluation results
-        and run pairwise judge comparison.
+        Run pairwise judge comparison between baseline and adaptive explanations.
         
         Args:
-            eval_results_file: Path to evaluation JSON file
+            question_results: List of question results from evaluation
+            timestamp: Timestamp string for output file naming
             
         Returns:
             Dictionary with comparison results from pairwise judge
         """
-        with open(eval_results_file, encoding="utf-8") as f:
-            results = json.load(f)
-        
-        question_results = results.get("question_results", [])
-        
         # Extract data for pairwise comparison
         questions = []
         expert_explanations = []
@@ -406,8 +411,8 @@ class EvaluationPipeline:
             
             questions.append(qr["question"])
             expert_explanations.append(qr.get("expert_explanation", ""))
-            baseline_explanations.append(qr["baseline"]["explanation"])
-            adaptive_explanations.append(qr["adaptive"]["explanation"])
+            baseline_explanations.append(qr["baseline"]["teacher_explanation"])
+            adaptive_explanations.append(qr["adaptive"]["teacher_explanation"])
             
             metadata.append({
                 "question_id": qr["question_id"],
@@ -422,7 +427,6 @@ class EvaluationPipeline:
         
         if len(questions) == 0:
             return {
-                "source_file": str(eval_results_file),
                 "error": "No valid question results found",
                 "summary": {}
             }
@@ -467,7 +471,7 @@ class EvaluationPipeline:
             print(f"    Adaptive: {adaptive_count}, Baseline: {baseline_count}, Ties: {ties_count}")
         
         # Save results
-        judge_output = eval_results_file.parent / f"judge_{eval_results_file.stem}.json"
+        judge_output = self.results_dir / f"judge_eval_{timestamp}.json"
         judge_output.write_text(
             json.dumps(judge_results, ensure_ascii=False, indent=2), 
             encoding="utf-8"
