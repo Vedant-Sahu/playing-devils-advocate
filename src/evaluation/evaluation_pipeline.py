@@ -170,7 +170,8 @@ class EvaluationPipeline:
         self, 
         baseline_graph=None,
         adaptive_graph=None,
-        max_iters: int = 3
+        max_iters: int = 3,
+        run_pairwise_judgment: bool = True
     ) -> Dict[str, Any]:
         """
         Run complete evaluation: zero-shot, baseline, and adaptive on same quiz.

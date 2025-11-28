@@ -7,7 +7,7 @@ Adaptive mode: Few-shot with iterative refinement based on student feedback
 
 from __future__ import annotations
 from typing import Any, Dict, List, Optional, Literal
-from langchain.schema import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 
 from src.config.agent_config import _llm
 from src.dspy_pipeline.manager import (
@@ -166,8 +166,8 @@ def _build_teacher_prompt(
 
 @instrument()
 def teacher_explain(
-    mode: Literal["baseline", "adaptive"] = "adaptive",
     question: str,
+    mode: Literal["baseline", "adaptive"] = "adaptive",
     correct_answer: Optional[str] = None,
     student_feedback: Optional[str] = None,
     word_cap: int = 300,
@@ -234,8 +234,8 @@ def adaptive_teacher_node(state: Dict[str, Any]) -> Dict[str, Any]:
 
     # Generate explanation in adaptive mode
     explanation = teacher_explain(
-        mode="adaptive",
         question=question,
+        mode="adaptive",
         correct_answer=correct_answer,
         student_feedback=filtered_feedback,
         word_cap=300
@@ -260,8 +260,8 @@ def baseline_teacher_node(state: Dict[str, Any]) -> Dict[str, Any]:
     
     # Generate explanation in baseline (zero-shot) mode
     explanation = teacher_explain(
-        mode="baseline",
         question=question,
+        mode="baseline",
         correct_answer=correct_answer,
         student_feedback=None,
         word_cap=300

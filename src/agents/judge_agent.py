@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from langchain.schema import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 
 from src.utils.parsing import _extract_json
 from src.config.agent_config import _llm
