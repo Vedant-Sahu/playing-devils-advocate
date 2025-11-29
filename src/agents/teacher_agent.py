@@ -9,11 +9,12 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Literal
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from src.config.agent_config import _llm
+from src.config.agent_config import _llm, PROMPT_MODE
 from src.dspy_pipeline.manager import (
     run_dspy_teacher_pass,
     should_use_dspy_teacher_backend,
 )
+from src.dspy_pipeline.base_prompts import get_prompt
 
 try:
     from trulens.core.otel.instrument import instrument  # type: ignore
@@ -209,16 +210,18 @@ def adaptive_teacher_node(state: Dict[str, Any]) -> Dict[str, Any]:
     Teacher node for adaptive refinement graph.
     
     Uses adaptive mode with student feedback for iterative improvement.
-    Extracts question from gpqa_question in state.
+    Includes web search for factual context and shows options to teacher.
     """
+    import os
     iteration = int(state.get("iteration", 0))
 
-    # Extract question from gpqa_question
-    gpqa_question = state.get("gpqa_question", [])
+    # Extract question and options from gpqa_question
+    gpqa_question = state.get("gpqa_question", {})
     if not gpqa_question:
         raise ValueError("gpqa_question not found in state")
     question = gpqa_question.get("question", "")
-    correct_answer = gpqa_question.get("correct_answer","")
+    options = gpqa_question.get("options", [])
+    correct_answer = gpqa_question.get("correct_answer", "")
 
     if should_use_dspy_teacher_backend():
         result = run_dspy_teacher_pass(gpqa_question, teacher_persona="general")
@@ -231,15 +234,53 @@ def adaptive_teacher_node(state: Dict[str, Any]) -> Dict[str, Any]:
 
     # Get filtered feedback from previous iteration
     filtered_feedback = state.get("filtered_critiques", "")
+    
+    # Web search for factual context (only on first iteration to save API calls)
+    web_context = ""
+    use_web_search = os.getenv("USE_WEB_SEARCH", "").lower() in ("1", "true", "yes")
+    if use_web_search and iteration == 0:
+        try:
+            from src.utils.web_search import search_web, extract_search_queries
+            queries = extract_search_queries(question, options)
+            if queries:
+                print(f"    [WebSearch] Searching for: {queries[:2]}")
+                results = []
+                for q in queries[:2]:  # Limit to 2 searches
+                    r = search_web(q, max_results=2)
+                    if r:
+                        results.append(r)
+                web_context = "\n\n".join(results)[:3000]  # Limit context size
+                if web_context:
+                    print(f"    [WebSearch] Retrieved {len(web_context)} chars")
+        except Exception as e:
+            print(f"    [WebSearch] Error: {e}")
 
-    # Generate explanation in adaptive mode
-    explanation = teacher_explain(
-        question=question,
-        mode="adaptive",
-        correct_answer=correct_answer,
-        student_feedback=filtered_feedback,
-        word_cap=300
-    )
+    # Build human message with options and web context
+    human_parts = [f"Question: {question}"]
+    if options:
+        human_parts.append(f"\nOPTIONS:\n" + "\n".join(options))
+    if web_context:
+        human_parts.append(f"\nWEB CONTEXT (use to clarify unfamiliar terms):\n{web_context}")
+    if correct_answer:
+        human_parts.append(f"\nCorrect answer (for guidance only - DO NOT reveal): {correct_answer}")
+    if filtered_feedback and filtered_feedback.strip():
+        human_parts.append(f"\nStudent feedback (address these gaps):\n{filtered_feedback}")
+    human_parts.append("\nProvide the explanation.")
+
+    # Use mode-aware prompt if in reasoning mode
+    if PROMPT_MODE == "reasoning":
+        prompt_template = get_prompt("teacher_adaptive", PROMPT_MODE)
+        sys = SystemMessage(content=prompt_template.strip())
+    else:
+        # Use existing adaptive prompt logic
+        sys, _ = _build_teacher_prompt("adaptive", question, correct_answer, filtered_feedback, 600)
+    
+    hum = HumanMessage(content="\n".join(human_parts))
+    
+    llm = _llm(role="teacher", max_tokens=5000)
+    resp = llm.invoke([sys, hum])
+    content = resp.content if isinstance(resp.content, str) else str(resp.content)
+    explanation = " ".join(content.strip().split())
     
     return {"explanation": explanation, "iteration": iteration + 1}
 

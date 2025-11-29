@@ -3,6 +3,9 @@ __pycache__/
 *.py[codz]
 *$py.class
 
+# Vector store (large files)
+data/physics_vectorstore/
+
 # C extensions
 *.so
 

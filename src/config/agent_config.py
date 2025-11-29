@@ -22,6 +22,9 @@ from langchain_openai import ChatOpenAI
 # Load environment variables
 load_dotenv()
 
+# Prompt mode: "concept" (original) or "reasoning" (step-by-step logic focus)
+PROMPT_MODE: str = os.getenv("PROMPT_MODE", "concept")
+
 # Default personas used across the system
 PERSONAS: List[str] = [
     "misconception_hunter",
