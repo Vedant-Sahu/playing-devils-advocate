@@ -3,11 +3,7 @@ from typing import Any, Dict
 from langchain_core.messages import HumanMessage, SystemMessage
 import difflib
 
-<<<<<<< HEAD
 from src.config.agent_config import _llm, PERSONAS, PERSONA_GUIDELINES, PROMPT_MODE
-=======
-from src.config.agent_config import _llm, PERSONAS, PERSONA_GUIDELINES
->>>>>>> origin/main
 from src.utils.parsing import _extract_json
 
 

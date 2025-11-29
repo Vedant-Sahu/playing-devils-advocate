@@ -9,19 +9,12 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Literal
 from langchain_core.messages import HumanMessage, SystemMessage
 
-<<<<<<< HEAD
 from src.config.agent_config import _llm, PROMPT_MODE
-=======
-from src.config.agent_config import _llm
->>>>>>> origin/main
 from src.dspy_pipeline.manager import (
     run_dspy_teacher_pass,
     should_use_dspy_teacher_backend,
 )
-<<<<<<< HEAD
 from src.dspy_pipeline.base_prompts import get_prompt
-=======
->>>>>>> origin/main
 
 try:
     from trulens.core.otel.instrument import instrument  # type: ignore
@@ -52,11 +45,8 @@ def _build_teacher_prompt(
     Returns:
         Tuple of (system_message, human_message)
     """
-    # Common answer context for both modes
-    if correct_answer:
-        answer_context = f"\n\nCorrect answer (for your guidance only - DO NOT reveal): {correct_answer}"
-    else:
-        answer_context = ""
+    # NOTE: correct_answer is no longer passed to the teacher to prevent answer leakage
+    answer_context = ""
 
     if mode == "baseline":
         # Zero-shot: No examples, no feedback, pure explanation
@@ -67,10 +57,6 @@ def _build_teacher_prompt(
                 "explanation that helps students understand the given question and its "
                 "underlying concepts. "
 
-                "ANSWER AWARENESS: You have access to the correct answer to guide your "
-                "explanation toward relevant concepts. Use this to focus on concepts "
-                "actually needed to solve this problem. "
-                
                 "CRITICAL CONSTRAINTS:\n"
                 "- NEVER directly state the correct answer letter or value\n"
                 "- NEVER use specific numbers from the question in your examples\n"
@@ -100,13 +86,6 @@ def _build_teacher_prompt(
                 "You are the Teacher Agent in an adaptive learning system. You are teaching "
                 "undergraduate Physics students with varying skills and backgrounds. "
 
-                "ANSWER AWARENESS: You have access to the correct answer to guide your "
-                "explanation toward relevant concepts. Use this to:\n"
-                "- Focus on concepts actually needed to solve this problem\n"
-                "- Evaluate whether student feedback is leading toward or away from solution\n"
-                "- Maintain accuracy when refining based on feedback\n"
-                "- Ignore feedback that misunderstands the core physics\n\n"
-                
                 "CRITICAL CONSTRAINTS:\n"
                 "- NEVER directly state the correct answer letter or value\n"
                 "- NEVER use specific numbers from the question in your examples\n"
@@ -217,7 +196,6 @@ def adaptive_teacher_node(state: Dict[str, Any]) -> Dict[str, Any]:
     Teacher node for adaptive refinement graph.
     
     Uses adaptive mode with student feedback for iterative improvement.
-<<<<<<< HEAD
     Includes web search for factual context and shows options to teacher.
     """
     import os
@@ -229,19 +207,7 @@ def adaptive_teacher_node(state: Dict[str, Any]) -> Dict[str, Any]:
         raise ValueError("gpqa_question not found in state")
     question = gpqa_question.get("question", "")
     options = gpqa_question.get("options", [])
-    correct_answer = gpqa_question.get("correct_answer", "")
-=======
-    Extracts question from gpqa_question in state.
-    """
-    iteration = int(state.get("iteration", 0))
-
-    # Extract question from gpqa_question
-    gpqa_question = state.get("gpqa_question", [])
-    if not gpqa_question:
-        raise ValueError("gpqa_question not found in state")
-    question = gpqa_question.get("question", "")
-    correct_answer = gpqa_question.get("correct_answer","")
->>>>>>> origin/main
+    # NOTE: correct_answer intentionally not extracted - prevents answer leakage to teacher
 
     if should_use_dspy_teacher_backend():
         result = run_dspy_teacher_pass(gpqa_question, teacher_persona="general")
@@ -254,7 +220,6 @@ def adaptive_teacher_node(state: Dict[str, Any]) -> Dict[str, Any]:
 
     # Get filtered feedback from previous iteration
     filtered_feedback = state.get("filtered_critiques", "")
-<<<<<<< HEAD
     
     # Web search for factual context (only on first iteration to save API calls)
     web_context = ""
@@ -282,8 +247,6 @@ def adaptive_teacher_node(state: Dict[str, Any]) -> Dict[str, Any]:
         human_parts.append(f"\nOPTIONS:\n" + "\n".join(options))
     if web_context:
         human_parts.append(f"\nWEB CONTEXT (use to clarify unfamiliar terms):\n{web_context}")
-    if correct_answer:
-        human_parts.append(f"\nCorrect answer (for guidance only - DO NOT reveal): {correct_answer}")
     if filtered_feedback and filtered_feedback.strip():
         human_parts.append(f"\nStudent feedback (address these gaps):\n{filtered_feedback}")
     human_parts.append("\nProvide the explanation.")
@@ -294,7 +257,7 @@ def adaptive_teacher_node(state: Dict[str, Any]) -> Dict[str, Any]:
         sys = SystemMessage(content=prompt_template.strip())
     else:
         # Use existing adaptive prompt logic
-        sys, _ = _build_teacher_prompt("adaptive", question, correct_answer, filtered_feedback, 600)
+        sys, _ = _build_teacher_prompt("adaptive", question, None, filtered_feedback, 600)
     
     hum = HumanMessage(content="\n".join(human_parts))
     
@@ -302,17 +265,6 @@ def adaptive_teacher_node(state: Dict[str, Any]) -> Dict[str, Any]:
     resp = llm.invoke([sys, hum])
     content = resp.content if isinstance(resp.content, str) else str(resp.content)
     explanation = " ".join(content.strip().split())
-=======
-
-    # Generate explanation in adaptive mode
-    explanation = teacher_explain(
-        question=question,
-        mode="adaptive",
-        correct_answer=correct_answer,
-        student_feedback=filtered_feedback,
-        word_cap=300
-    )
->>>>>>> origin/main
     
     return {"explanation": explanation, "iteration": iteration + 1}
 
@@ -325,17 +277,16 @@ def baseline_teacher_node(state: Dict[str, Any]) -> Dict[str, Any]:
     Extracts question from gpqa_question in state.
     """
     # Extract question from gpqa_question
-    gpqa_question = state.get("gpqa_question", [])
+    gpqa_question = state.get("gpqa_question", {})
     if not gpqa_question:
         raise ValueError("gpqa_question not found in state")
     question = gpqa_question.get("question", "")
-    correct_answer = gpqa_question.get("correct_answer", "")
     
     # Generate explanation in baseline (zero-shot) mode
     explanation = teacher_explain(
         question=question,
         mode="baseline",
-        correct_answer=correct_answer,
+        correct_answer=None,  # Prevent answer leakage
         student_feedback=None,
         word_cap=300
     )
