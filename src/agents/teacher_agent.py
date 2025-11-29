@@ -9,12 +9,19 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Literal
 from langchain_core.messages import HumanMessage, SystemMessage
 
+<<<<<<< HEAD
 from src.config.agent_config import _llm, PROMPT_MODE
+=======
+from src.config.agent_config import _llm
+>>>>>>> origin/main
 from src.dspy_pipeline.manager import (
     run_dspy_teacher_pass,
     should_use_dspy_teacher_backend,
 )
+<<<<<<< HEAD
 from src.dspy_pipeline.base_prompts import get_prompt
+=======
+>>>>>>> origin/main
 
 try:
     from trulens.core.otel.instrument import instrument  # type: ignore
@@ -210,6 +217,7 @@ def adaptive_teacher_node(state: Dict[str, Any]) -> Dict[str, Any]:
     Teacher node for adaptive refinement graph.
     
     Uses adaptive mode with student feedback for iterative improvement.
+<<<<<<< HEAD
     Includes web search for factual context and shows options to teacher.
     """
     import os
@@ -222,6 +230,18 @@ def adaptive_teacher_node(state: Dict[str, Any]) -> Dict[str, Any]:
     question = gpqa_question.get("question", "")
     options = gpqa_question.get("options", [])
     correct_answer = gpqa_question.get("correct_answer", "")
+=======
+    Extracts question from gpqa_question in state.
+    """
+    iteration = int(state.get("iteration", 0))
+
+    # Extract question from gpqa_question
+    gpqa_question = state.get("gpqa_question", [])
+    if not gpqa_question:
+        raise ValueError("gpqa_question not found in state")
+    question = gpqa_question.get("question", "")
+    correct_answer = gpqa_question.get("correct_answer","")
+>>>>>>> origin/main
 
     if should_use_dspy_teacher_backend():
         result = run_dspy_teacher_pass(gpqa_question, teacher_persona="general")
@@ -234,6 +254,7 @@ def adaptive_teacher_node(state: Dict[str, Any]) -> Dict[str, Any]:
 
     # Get filtered feedback from previous iteration
     filtered_feedback = state.get("filtered_critiques", "")
+<<<<<<< HEAD
     
     # Web search for factual context (only on first iteration to save API calls)
     web_context = ""
@@ -281,6 +302,17 @@ def adaptive_teacher_node(state: Dict[str, Any]) -> Dict[str, Any]:
     resp = llm.invoke([sys, hum])
     content = resp.content if isinstance(resp.content, str) else str(resp.content)
     explanation = " ".join(content.strip().split())
+=======
+
+    # Generate explanation in adaptive mode
+    explanation = teacher_explain(
+        question=question,
+        mode="adaptive",
+        correct_answer=correct_answer,
+        student_feedback=filtered_feedback,
+        word_cap=300
+    )
+>>>>>>> origin/main
     
     return {"explanation": explanation, "iteration": iteration + 1}
 
