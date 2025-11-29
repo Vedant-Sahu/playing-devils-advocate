@@ -2,7 +2,11 @@
 __pycache__/
 *.py[codz]
 *$py.class
+<<<<<<< HEAD
 data/physics_vectorstore/
+=======
+
+>>>>>>> c902d9778133fa7756d947a82f2204eb01ecb77a
 # C extensions
 *.so
 
