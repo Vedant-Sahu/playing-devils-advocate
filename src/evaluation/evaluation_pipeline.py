@@ -17,7 +17,7 @@ from typing import Dict, List, Any
 from src.utils.gpqa_sampler import create_gpqa_quiz
 from src.graphs.adaptive_refinement_graph import create_adaptive_refinement_graph, create_initial_state as adaptive_state
 from src.graphs.baseline_graph import create_baseline_graph, create_initial_state as baseline_state
-from src.agents.pairwise_judge_agent import batch_pairwise_comparison
+from src.agents.multi_metric_judge_agent import batch_multi_metric_comparison
 from src.config.agent_config import _llm, PERSONAS
 
 
@@ -390,17 +390,18 @@ class EvaluationPipeline:
             timestamp: str
         ) -> Dict[str, Any]:
         """
-        Run pairwise judge comparison between baseline and adaptive explanations.
+        Run multi-metric judge comparison between baseline and adaptive explanations.
         
         Args:
             question_results: List of question results from evaluation
             timestamp: Timestamp string for output file naming
             
         Returns:
-            Dictionary with comparison results from pairwise judge
+            Dictionary with comprehensive multi-metric comparison results
         """
-        # Extract data for pairwise comparison
+        # Extract data for multi-metric comparison
         questions = []
+        correct_answers = []
         expert_explanations = []
         baseline_explanations = []
         adaptive_explanations = []
@@ -411,6 +412,7 @@ class EvaluationPipeline:
                 continue
             
             questions.append(qr["question"])
+            correct_answers.append(qr["correct_answer"])  
             expert_explanations.append(qr.get("expert_explanation", ""))
             baseline_explanations.append(qr["baseline"]["teacher_explanation"])
             adaptive_explanations.append(qr["adaptive"]["teacher_explanation"])
@@ -432,17 +434,20 @@ class EvaluationPipeline:
                 "summary": {}
             }
         
-        print(f"\nRunning pairwise judge on {len(questions)} explanations...")
-        print(f"Comparing: adaptive vs baseline\n")
+        print(f"\nRunning multi-metric judge on {len(questions)} explanations...")
+        print(f"Comparing: adaptive vs baseline")
+        print(f"Metrics: Conceptual Accuracy, Pedagogical Clarity, Misconception Avoidance,")
+        print(f"         Completeness, Accessibility, Engagement Potential\n")
         
-        # Run batch comparison
-        judge_results = batch_pairwise_comparison(
+        # Run batch multi-metric comparison
+        judge_results = batch_multi_metric_comparison(
             questions=questions,
-            expert_explanations=expert_explanations,
+            correct_answers=correct_answers, 
             explanations_a=adaptive_explanations,
             explanations_b=baseline_explanations,
             label_a="adaptive",
-            label_b="baseline"
+            label_b="baseline",
+            expert_explanations=expert_explanations
         )
         
         # Add metadata to individual results
@@ -453,23 +458,35 @@ class EvaluationPipeline:
         # Print summary
         summary = judge_results["summary"]
         print(f"{'='*80}")
-        print("PAIRWISE JUDGE RESULTS")
+        print("MULTI-METRIC JUDGE RESULTS")
         print(f"{'='*80}")
         print(f"Total Comparisons: {summary['total_comparisons']}")
-        print(f"\nOverall Winners:")
-        print(f"  Adaptive: {summary['adaptive_wins']} ({summary['adaptive_win_rate']:.1%})")
-        print(f"  Baseline: {summary['baseline_wins']} ({summary['baseline_win_rate']:.1%})")
-        print(f"  Ties:     {summary['ties']}")
+        print(f"Successful Comparisons: {summary['successful_comparisons']}")
         
-        print(f"\nCriterion Breakdown:")
-        for criterion in ["physics_correctness", "pedagogical_quality", "clarity_precision"]:
-            adaptive_count = summary['criterion_breakdown']['adaptive'][criterion]
-            baseline_count = summary['criterion_breakdown']['baseline'][criterion]
-            total = summary['total_comparisons']
-            ties_count = total - adaptive_count - baseline_count
+        print(f"\nOverall Winners:")
+        print(f"  Adaptive: {summary['overall_winners']['adaptive_wins']} ({summary['overall_winners']['adaptive_win_rate']:.1%})")
+        print(f"  Baseline: {summary['overall_winners']['baseline_wins']} ({summary['overall_winners']['baseline_win_rate']:.1%})")
+        print(f"  Ties:     {summary['overall_winners']['ties']}")
+        
+        print(f"\nScore Aggregates (0-10 scale per metric):")
+        print(f"  Adaptive: {summary['score_aggregates']['adaptive']['average_per_comparison']:.2f}/60 avg per question")
+        print(f"            {summary['score_aggregates']['adaptive']['average_per_metric']:.2f}/10 avg per metric")
+        print(f"  Baseline: {summary['score_aggregates']['baseline']['average_per_comparison']:.2f}/60 avg per question")
+        print(f"            {summary['score_aggregates']['baseline']['average_per_metric']:.2f}/10 avg per metric")
+        
+        print(f"\nMetric Breakdown (average scores 0-10):")
+        metrics = ["conceptual_accuracy", "pedagogical_clarity", "misconception_avoidance", 
+                   "completeness", "accessibility", "engagement_potential"]
+        
+        for metric in metrics:
+            adaptive_avg = summary['metric_breakdown']['adaptive_averages'][metric]
+            baseline_avg = summary['metric_breakdown']['baseline_averages'][metric]
+            adaptive_wins = summary['metric_breakdown']['adaptive_metric_wins'][metric]
+            baseline_wins = summary['metric_breakdown']['baseline_metric_wins'][metric]
             
-            print(f"  {criterion.replace('_', ' ').title()}:")
-            print(f"    Adaptive: {adaptive_count}, Baseline: {baseline_count}, Ties: {ties_count}")
+            print(f"  {metric.replace('_', ' ').title()}:")
+            print(f"    Adaptive: {adaptive_avg:.2f}/10 (wins: {adaptive_wins})")
+            print(f"    Baseline: {baseline_avg:.2f}/10 (wins: {baseline_wins})")
         
         # Save results
         judge_output = self.results_dir / f"judge_eval_{timestamp}.json"
