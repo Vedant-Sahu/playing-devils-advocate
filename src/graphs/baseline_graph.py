@@ -26,6 +26,7 @@ class State(TypedDict, total=False):
     single_answer: str
     single_explanation: str
     quiz_results: Dict[str, Any]
+    tool_calls: List[Dict[str, Any]]  # Track teacher's tool usage
 
 
 def create_baseline_graph() -> StateGraph:

@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Any, Dict
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from src.config.agent_config import _llm, PERSONAS, PERSONA_GUIDELINES, PROMPT_MODE
+from src.config.agent_config import _llm, PERSONAS, PERSONA_GUIDELINES
 from src.utils.parsing import _extract_json, extract_letter_a_to_d, extract_one_sentence
 from src.dspy_pipeline.base_prompts import get_prompt
 

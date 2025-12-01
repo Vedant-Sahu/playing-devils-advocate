@@ -30,7 +30,8 @@ class EvaluationPipeline:
         domain: str = "Physics",
         n_questions: int = 10,
         seed: int = 53,
-        results_dir: Path = Path("results")
+        results_dir: Path = Path("results"),
+        custom_cache_file: str = None
     ):
         self.subset = subset
         self.domain = domain
@@ -38,16 +39,18 @@ class EvaluationPipeline:
         self.seed = seed
         self.results_dir = Path(results_dir)
         self.results_dir.mkdir(parents=True, exist_ok=True)
+        self.custom_cache_file = custom_cache_file
         
         self.rng = random.Random(seed)
         
     def generate_quiz(self) -> tuple[List[Dict[str, Any]], List[int]]:
-        """Generate quiz questions from GPQA dataset."""
+        """Generate quiz questions from GPQA dataset or custom cache file."""
         quiz, indices = create_gpqa_quiz(
             subset=self.subset,
             domain=self.domain,
             seed=self.seed,
-            num_questions=self.n_questions
+            num_questions=self.n_questions,
+            custom_cache_file=self.custom_cache_file
         )
         return quiz, indices
     
@@ -123,7 +126,7 @@ class EvaluationPipeline:
         quiz_results = baseline_results.get("quiz_results", {})
         is_correct = quiz_results.get("is_correct", False)
         
-        return {
+        result = {
             "quiz_results": quiz_results,
             "overall_score": 1.0 if is_correct else 0.0,
             "is_correct": is_correct,
@@ -131,6 +134,10 @@ class EvaluationPipeline:
             "single_answer": baseline_results.get("single_answer", ""),
             "answer_reasoning": baseline_results.get("single_explanation", "")
         }
+        # Include tool_calls only if present (tools were enabled and used)
+        if baseline_results.get("tool_calls"):
+            result["tool_calls"] = baseline_results["tool_calls"]
+        return result
     
     def run_adaptive(
         self,
@@ -154,7 +161,7 @@ class EvaluationPipeline:
         quiz_results = adaptive_results.get("quiz_results", {})
         is_correct = quiz_results.get("is_correct", False)
         
-        return {
+        result = {
             "quiz_results": quiz_results,
             "overall_score": 1.0 if is_correct else 0.0,
             "is_correct": is_correct,
@@ -165,6 +172,10 @@ class EvaluationPipeline:
             "final_scores": adaptive_results.get("reward_scores", {}),
             "history": adaptive_results.get("history", [])
         }
+        # Include tool_calls only if present (tools were enabled and used)
+        if adaptive_results.get("tool_calls"):
+            result["tool_calls"] = adaptive_results["tool_calls"]
+        return result
     
     def run_full_evaluation(
         self, 
@@ -225,6 +236,32 @@ class EvaluationPipeline:
                 baseline_result = self.run_baseline(gpqa_question, baseline_graph)
                 adaptive_result = self.run_adaptive(gpqa_question, adaptive_graph, max_iters)
                 
+                # Build baseline dict
+                baseline_data = {
+                    "quiz_performance": baseline_result["quiz_results"],
+                    "overall_score": baseline_result["overall_score"],
+                    "predicted": baseline_result.get("single_answer", "?"),
+                    "teacher_explanation": baseline_result["teacher_explanation"],
+                    "answer_reasoning": baseline_result.get("answer_reasoning", "")
+                }
+                # Include tool_calls only if present
+                if baseline_result.get("tool_calls"):
+                    baseline_data["tool_calls"] = baseline_result["tool_calls"]
+                
+                # Build adaptive dict
+                adaptive_data = {
+                    "quiz_performance": adaptive_result["quiz_results"],
+                    "overall_score": adaptive_result["overall_score"],
+                    "predicted": adaptive_result.get("single_answer", "?"),
+                    "teacher_explanation": adaptive_result["teacher_explanation"],
+                    "answer_reasoning": adaptive_result.get("answer_reasoning", ""),
+                    "iterations": adaptive_result.get("iterations", 0),
+                    "final_scores": adaptive_result.get("final_scores", {})
+                }
+                # Include tool_calls only if present
+                if adaptive_result.get("tool_calls"):
+                    adaptive_data["tool_calls"] = adaptive_result["tool_calls"]
+                
                 question_results.append({
                     "question_id": question_id,
                     "question": question,
@@ -236,29 +273,14 @@ class EvaluationPipeline:
                         "overall_score": zero_shot_result["overall_score"],
                         "predicted": zero_shot_result["quiz_results"].get("predicted", "?")
                     },
-                    "baseline": {
-                        "quiz_performance": baseline_result["quiz_results"],
-                        "overall_score": baseline_result["overall_score"],
-                        "predicted": baseline_result.get("single_answer", "?"),
-                        "teacher_explanation": baseline_result["teacher_explanation"],
-                        "answer_reasoning": baseline_result.get("answer_reasoning", "")
-                    },
-                    "adaptive": {
-                        "quiz_performance": adaptive_result["quiz_results"],
-                        "overall_score": adaptive_result["overall_score"],
-                        "predicted": adaptive_result.get("single_answer", "?"),
-                        "teacher_explanation": adaptive_result["teacher_explanation"],
-                        "answer_reasoning": adaptive_result.get("answer_reasoning", ""),
-                        "iterations": adaptive_result.get("iterations", 0),
-                        "final_scores": adaptive_result.get("final_scores", {})
-                    }
+                    "baseline": baseline_data,
+                    "adaptive": adaptive_data
                 })
                 
                 print(f"\n  Results:")
                 print(f"    Zero-shot: {'✓' if zero_shot_result['overall_score'] == 1.0 else '✗'} (answer: {zero_shot_result['quiz_results'].get('predicted', '?')})")
                 print(f"    Baseline:  {'✓' if baseline_result['overall_score'] == 1.0 else '✗'} (answer: {baseline_result.get('single_answer', '?')})")
                 print(f"    Adaptive:  {'✓' if adaptive_result['overall_score'] == 1.0 else '✗'} (answer: {adaptive_result.get('single_answer', '?')}, {adaptive_result.get('iterations', 0)} iterations)")
-                
                 
             except Exception as e:
                 print(f"  ERROR: {e}")

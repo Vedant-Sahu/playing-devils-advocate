@@ -68,7 +68,8 @@ def create_gpqa_quiz(
     domain: str = "Physics",
     seed: int = 17,
     index: int = None,
-    num_questions: int = 1
+    num_questions: int = 1,
+    custom_cache_file: str = None
 ) -> Tuple[List[Dict[str, Any]], List[int]]:
     """
     Create a formatted quiz from GPQA questions.
@@ -79,12 +80,13 @@ def create_gpqa_quiz(
         seed: Random seed for deterministic sampling and shuffling
         index: Specific starting index
         num_questions: Number of questions to include in quiz
+        custom_cache_file: Path to custom curated dataset (optional)
         
     Returns:
         Tuple of (quiz_list, sampled_indices)
     """
     rng = random.Random(seed)
-    loader = GPQALoader(subset, domain)
+    loader = GPQALoader(subset, domain, custom_cache_file=custom_cache_file)
     
     # Sample indices
     if index is not None:
