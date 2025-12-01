@@ -28,6 +28,9 @@ class State(TypedDict, total=False):
     single_explanation: str
     quiz_results: Dict[str, Any]
     tool_calls: List[Dict[str, Any]]  # Track teacher's tool usage
+    answer_leakage_detected: bool  # Track if leakage was found
+    leakage_feedback: str  # Feedback to teacher if leakage detected
+    leakage_check_count: int  # Count of leakage checks to prevent infinite loops
 
 
 def create_baseline_graph() -> StateGraph:
@@ -36,8 +39,10 @@ def create_baseline_graph() -> StateGraph:
     
     This graph implements a simple zero-shot approach where:
     1. Teacher generates explanation from question (no refinement)
-    2. Students answer questions based on explanation
-    3. Grading agent evaluates final learning outcomes
+    2. Leakage checker validates explanation doesn't reveal answer
+    3. (If leakage: loop back to teacher for revision)
+    4. Students answer questions based on explanation
+    5. Grading agent evaluates final learning outcomes
     
     This provides a baseline to measure improvement from adaptive refinement.
     
@@ -61,8 +66,21 @@ def create_baseline_graph() -> StateGraph:
         
     # Conditional routing from leakage checker
     def route_from_leakage(state: State) -> str:
-        """Route back to teacher if leakage detected, otherwise to single answer."""
-        return "teacher" if state.get("answer_leakage_detected") else "single answer"
+        """
+        Route back to teacher if leakage detected, otherwise to single answer.
+        Includes safety limit: after 3 leakage detections, proceed anyway
+        to prevent infinite loops.
+        """
+        leakage_count = state.get("leakage_check_count", 0)
+        # Safety: max 3 attempts to fix leakage
+        if leakage_count >= 3:
+            print(f"⚠️ WARNING: Leakage persists after 3 attempts. Proceeding anyway.")
+            return "single_answer"
+        
+        if state.get("answer_leakage_detected", False):
+            return "teacher"
+        else:
+            return "single_answer"
     
     graph.add_conditional_edges(
         "leakage checker",
@@ -97,6 +115,9 @@ def create_initial_state(
         "gpqa_question": gpqa_question,
         "threshold": threshold,
         "max_iters": max_iters,
+        "answer_leakage_detected": False,
+        "leakage_feedback": "",
+        "leakage_check_count": 0
     }
 
 

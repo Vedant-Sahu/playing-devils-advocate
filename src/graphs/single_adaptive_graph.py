@@ -35,8 +35,9 @@ class State(TypedDict, total=False):
     single_explanation: str
     quiz_results: Dict[str, Any]
     tool_calls: List[Dict[str, Any]]  # Track teacher's tool usage
-    answer_leakage_detected: bool
-    leakage_feedback: str
+    answer_leakage_detected: bool  # Track if leakage was found
+    leakage_feedback: str  # Feedback to teacher if leakage detected
+    leakage_check_count: int  # Count of leakage checks to prevent infinite loops
 
 
 def create_single_adaptive_graph() -> StateGraph:
@@ -85,14 +86,21 @@ def create_single_adaptive_graph() -> StateGraph:
     
     # Conditional routing from leakage checker
     def route_from_leakage(state: State) -> str:
-        """Route back to teacher if leakage detected, otherwise to single answer."""
-        return "teacher" if state.get("answer_leakage_detected") else "single answer"
-    
-    graph.add_conditional_edges(
-        "leakage checker",
-        route_from_leakage,
-        {"teacher": "teacher", "single answer": "single answer"}
-    )
+        """
+        Route back to teacher if leakage detected, otherwise to single answer.
+        Includes safety limit: after 3 leakage detections, proceed anyway
+        to prevent infinite loops.
+        """
+        leakage_count = state.get("leakage_check_count", 0)
+        # Safety: max 3 attempts to fix leakage
+        if leakage_count >= 3:
+            print(f"⚠️ WARNING: Leakage persists after 3 attempts. Proceeding anyway.")
+            return "single_answer"
+        
+        if state.get("answer_leakage_detected", False):
+            return "teacher"
+        else:
+            return "single_answer"
     
     # Set entry point
     graph.set_entry_point("teacher")
@@ -123,7 +131,10 @@ def create_initial_state(
         "max_iters": max_iters,
         "iteration": 0,
         "single_student_critique": "",
-        "critique_history": []
+        "critique_history": [],
+        "answer_leakage_detected": False,
+        "leakage_feedback": "",
+        "leakage_check_count": 0
     }
 
 
