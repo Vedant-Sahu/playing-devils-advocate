@@ -42,28 +42,65 @@ def stopping_decision(
 
 
 def stopper_node(state: Dict[str, Any]) -> Dict[str, Any]:
-    scores = state.get("reward_scores", {})
-    raw_hist = state.get("history", [])
-    # Use only prior rounds that actually recorded reward_scores to avoid counting other history entries
-    history_scores = [
-        h.get("reward_scores", {})
-        for h in raw_hist
-        if isinstance(h.get("reward_scores"), dict) and h.get("reward_scores")
-    ]
+    """
+    Unified stopper node that handles both single and multi-student modes.
+    
+    Detects mode based on state fields:
+    - Single student mode: Checks single_student_critique and iteration count
+    - Multi-student mode: Uses reward_scores and persona-based stopping logic
+    """
     iteration = int(state.get("iteration", 0))
     cfg = StopConfig(
         threshold=state.get("threshold", 0.7),
         max_iterations=state.get("max_iters", 5),
         stagnation_window=int(state.get("stagnation_window", StopConfig().stagnation_window)),
     )
-    responses = state.get("student_responses", {})
-    all_empty = False
-    if isinstance(responses, dict):
-        try:
-            all_empty = all(isinstance(responses.get(p, {}), dict) and len(responses.get(p, {})) == 0 for p in PERSONAS)
-        except Exception:
-            all_empty = False
-    if all_empty:
-        return {"decision": "STOP", "reason": "All personas returned empty feedback."}
-    decision = stopping_decision(scores, history_scores, iteration, cfg)
-    return {"decision": decision.get("decision"), "reason": decision.get("reason")}
+    
+    # Safety cap for both modes
+    if iteration >= cfg.max_iterations:
+        return {"decision": "STOP", "reason": "Max iterations reached."}
+    
+    # Detect mode based on state fields
+    if "single_student_critique" in state:
+        # Single student mode - simpler stopping logic
+        critique = state.get("single_student_critique", "")
+        critique_history = state.get("critique_history", [])
+        
+        # Stop if no critique or critique is empty/null
+        if not critique or critique.strip() == "" or "No significant issues" in critique:
+            return {"decision": "STOP", "reason": "No significant issues identified by student."}
+        
+        # Check for stagnation - same critique repeated
+        if len(critique_history) >= cfg.stagnation_window:
+            recent = critique_history[-cfg.stagnation_window:]
+            if all(c == critique for c in recent):
+                return {"decision": "STOP", "reason": f"Stagnation: same critique for {cfg.stagnation_window} rounds."}
+        
+        # Otherwise continue
+        return {"decision": "CONTINUE", "reason": "Student identified issues to address."}
+    
+    else:
+        # Multi-student mode - use reward scores
+        scores = state.get("reward_scores", {})
+        raw_hist = state.get("history", [])
+        
+        # Use only prior rounds that actually recorded reward_scores
+        history_scores = [
+            h.get("reward_scores", {})
+            for h in raw_hist
+            if isinstance(h.get("reward_scores"), dict) and h.get("reward_scores")
+        ]
+        
+        responses = state.get("student_responses", {})
+        all_empty = False
+        if isinstance(responses, dict):
+            try:
+                all_empty = all(isinstance(responses.get(p, {}), dict) and len(responses.get(p, {})) == 0 for p in PERSONAS)
+            except Exception:
+                all_empty = False
+        
+        if all_empty:
+            return {"decision": "STOP", "reason": "All personas returned empty feedback."}
+        
+        decision = stopping_decision(scores, history_scores, iteration, cfg)
+        return {"decision": decision.get("decision"), "reason": decision.get("reason")}

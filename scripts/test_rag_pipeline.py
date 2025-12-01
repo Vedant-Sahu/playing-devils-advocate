@@ -111,7 +111,7 @@ def load_test_questions():
 
 def run_single_question(question_data: dict, graph, use_rag: bool) -> dict:
     """Run pipeline on a single question and return results."""
-    from src.graphs.adaptive_refinement_graph import create_initial_state
+    from src.graphs.single_adaptive_graph import create_initial_state
     
     q_id = question_data.get("id", "unknown")
     q_text = question_data.get("question", "")[:80]
@@ -196,7 +196,7 @@ def main():
     
     # Import and create graph
     print("\nInitializing adaptive refinement graph...")
-    from src.graphs.adaptive_refinement_graph import create_adaptive_refinement_graph
+    from src.graphs.single_adaptive_graph import create_adaptive_refinement_graph
     graph = create_adaptive_refinement_graph()
     print("Graph ready.")
     

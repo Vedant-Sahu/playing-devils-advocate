@@ -1,10 +1,9 @@
 from __future__ import annotations
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from src.config.agent_config import _llm, PERSONAS, PERSONA_GUIDELINES
+from src.config.agent_config import _llm, PERSONAS, PERSONA_GUIDELINES, get_single_student_persona
 from src.utils.parsing import _extract_json, extract_letter_a_to_d, extract_one_sentence
-from src.dspy_pipeline.base_prompts import get_prompt
 
 
 def student_respond(
@@ -12,11 +11,21 @@ def student_respond(
         explanation: str,
         score_history: Optional[List[Dict]] = None
     ) -> Dict[str, Any]:
-
+    """
+    Single student provides critique of the explanation.
+    
+    Args:
+        persona: Student persona name
+        explanation: Teacher's explanation to critique
+        score_history: Optional history of scores for this persona
+        
+    Returns:
+        Dictionary with persona, issue, and quote
+    """
     key = persona.lower().strip()
     guide = PERSONA_GUIDELINES.get(key, "You are a student.")
 
-    # Build performance context
+    # Build performance context for multi-student mode
     performance_context = ""
     if score_history and len(score_history) > 0:
         latest = score_history[-1]
@@ -51,8 +60,8 @@ def student_respond(
     sys = SystemMessage(
         content=(
             guide
-            + "\n\nYour task: Identify the SINGLE MOST IMPORTANT issue with this explanation.\n"
-            " Focus on problems that would confuse students or create misconceptions.\n\n"
+            + "\n\nYour task: Identify the SINGLE MOST IMPORTANT issue with this solution guide.\n"
+            " Focus on problems that would confuse students trying to solve the problem.\n\n"
             " Return a JSON object with:\n"
             " - 'issue': Brief description of the main problem (max 100 words)\n"
             " - 'quote': Exact phrase from explanation that demonstrates the issue\n\n"
@@ -61,10 +70,11 @@ def student_respond(
             " DO NOT rate severity yourself - independent judges will evaluate that.\n"
             " DO NOT provide generic praise or multiple small issues.\n"
             " Focus on finding the most important issue you can identify.\n"
+            + performance_context
         )
     )
     
-    hum = HumanMessage(content=f"Explanation:\n{explanation}")
+    hum = HumanMessage(content=f"Solution Guide:\n{explanation}")
     resp = llm.invoke([sys, hum])
     raw = resp.content
     parsed = raw if isinstance(raw, dict) else _extract_json(raw if isinstance(raw, str) else str(raw))
@@ -85,12 +95,46 @@ def student_respond(
     }
 
 
-def student_critiques_node(state: Dict[str, Any]) -> Dict[str, Any]:
-    """All students provide their top issue"""
-    
+def single_student_critique_node(state: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Single student provides critique for single_student_adaptive mode.
+    Uses the persona specified in agent_config (or default).
+    """
     explanation = state.get("explanation")
     if not isinstance(explanation, str) or not explanation.strip():
-        raise ValueError("explanation is required in state for students_node.")
+        raise ValueError("explanation is required in state for single_student_critique_node.")
+    
+    # Get the single student persona
+    persona = get_single_student_persona()
+    
+    # Get score history for this persona (not used in single mode typically)
+    score_history = state.get("student_score_history", {}).get(persona, [])
+    
+    # Get feedback
+    fb = student_respond(persona, explanation, score_history)
+    if not isinstance(fb, dict):
+        raise ValueError(f"student_respond must return an object for persona '{persona}'.")
+    
+    # Format as simple string for single student mode
+    if fb.get("issue"):
+        critique_text = f"Issue: {fb['issue']}\nQuote: {fb['quote']}"
+    else:
+        critique_text = "No significant issues identified."
+    
+    return {
+        "single_student_critique": critique_text,
+        "single_student_response": fb
+    }
+
+
+def multi_student_critiques_node(state: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Multiple students provide critiques for multi_student_adaptive mode.
+    All personas from PERSONAS list participate.
+    """
+    explanation = state.get("explanation")
+    if not isinstance(explanation, str) or not explanation.strip():
+        raise ValueError("explanation is required in state for multi_student_critiques_node.")
     
     # Get score history for each student
     score_history = state.get("student_score_history", {})
@@ -112,15 +156,27 @@ def student_answers(
         explanation: str,
         gpqa_question: Dict[str, Any]
     ) -> Dict[str, Dict[str, str]]:
+    """
+    Student answers the question based on the explanation.
+    
+    Args:
+        persona: Student persona name
+        explanation: Teacher's explanation
+        gpqa_question: Question dictionary with id, question, options
+        
+    Returns:
+        Dictionary with 'answers' and 'justifications'
+    """
     key = persona.lower().strip()
     guide = PERSONA_GUIDELINES.get(key, "You are a student.")
     llm = _llm(temperature=0.0, json_mode=True, role="student", max_tokens=2000)
     sys = SystemMessage(
         content=(
             guide
-            + " Answer the multiple-choice question strictly using the information in the teacher's explanation. "
+            + " Answer the multiple-choice question strictly using the information in the teacher's solution guide. "
+            + "Apply the steps and methods described to solve the problem. "
             + "Be careful while solving the question and make sure to check your math and reasoning. "
-            + "For each question, select exactly one option A–D and provide a concise justification of 1–2 sentences. "
+            + "For each question, select exactly one option A-D and provide a concise justification of 1-2 sentences. "
             + "Do NOT exceed more than 100 words for your justification. "
             + "Do NOT include any extra text, explanation, or commentary. "
             + "Return ONLY with a short JSON of the form {\"answers\": {\"<ID>\": \"A\", ...}, \"justifications\": {\"<ID>\": \"...\", ...}}. "
@@ -136,14 +192,13 @@ def student_answers(
     quiz_text = "\n".join(quiz_text_lines)
     hum = HumanMessage(
         content=(
-            "Teacher explanation (context for answering):\n" + str(explanation) + "\n\n"
-            + "Answer the following quiz based only on the explanation above.\n\n"
+            "Teacher's solution guide (use this to solve the problem):\n" + str(explanation) + "\n\n"
+            + "Answer the following quiz by applying the methods described above.\n\n"
             + quiz_text
         )
     )
 
     try:
-        
         resp = llm.invoke([sys, hum])
         raw = resp.content
         parsed = raw if isinstance(raw, dict) else _extract_json(raw if isinstance(raw, str) else str(raw))
@@ -174,13 +229,39 @@ def student_answers(
         raise RuntimeError(f"Failed to collect answers for persona '{persona}': {e}")
 
 
-def student_answers_node(state: Dict[str, Any]) -> Dict[str, Any]:
-    
+def single_student_answer_node(state: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Single student answers question for single_student_adaptive mode.
+    """
     explanation = state.get("explanation")
-    gpqa_question = state.get("gpqa_question", [])
+    gpqa_question = state.get("gpqa_question", {})
 
     if not isinstance(explanation, str) or not explanation.strip():
-        raise ValueError("Explanation is required in state for student_answers_node.")
+        raise ValueError("Explanation is required in state for single_student_answer_node.")
+    
+    if not gpqa_question or not isinstance(gpqa_question, Dict):
+        raise ValueError("gpqa_question must be a non-empty dictionary in state.")
+    
+    # Get the single student persona
+    persona = get_single_student_persona()
+    
+    res = student_answers(persona, explanation, gpqa_question)
+    
+    return {
+        "single_student_answer": res.get("answers", {}),
+        "single_student_justification": res.get("justifications", {})
+    }
+
+
+def multi_student_answers_node(state: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Multiple students answer question for multi_student_adaptive mode.
+    """
+    explanation = state.get("explanation")
+    gpqa_question = state.get("gpqa_question", {})
+
+    if not isinstance(explanation, str) or not explanation.strip():
+        raise ValueError("Explanation is required in state for multi_student_answers_node.")
     
     if not gpqa_question or not isinstance(gpqa_question, Dict):
         raise ValueError("gpqa_question must be a non-empty dictionary in state.")
@@ -193,16 +274,23 @@ def student_answers_node(state: Dict[str, Any]) -> Dict[str, Any]:
         answers_by_persona[p] = res.get("answers", {})
         justifs_by_persona[p] = res.get("justifications", {})
 
-    return {"student_answers": answers_by_persona,
-            "student_justifications": justifs_by_persona}
+    return {
+        "student_answers": answers_by_persona,
+        "student_justifications": justifs_by_persona
+    }
 
 
 def single_answer(explanation: str, gpqa_question: Dict[str, Any]) -> Dict[str, str]:
+    """
+    Get a single answer from the model based on the explanation.
+    Used for baseline mode or as a direct answer generator.
+    """
     llm = _llm(temperature=1.0, json_mode=True, role="answerer")
     sys = SystemMessage(content=(
-        "Use ONLY the information from the Teacher explanation provided below to answer the question. "
-        "Do NOT use outside knowledge, prior memory, or unstated assumptions. If the explanation is insufficient, "
-        "choose the best answer strictly based on that explanation. "
+        "Use ONLY the information from the Teacher's solution guide provided below to answer the question. "
+        "Apply the steps and methods described to solve the problem. "
+        "Do NOT use outside knowledge, prior memory, or unstated assumptions. If the guide is insufficient, "
+        "choose the best answer strictly based on that guide. "
         "Return ONLY valid JSON with keys 'answer' and 'explanation'. "
         "Constraints: 'answer' must be exactly one of ['A','B','C','D'] (uppercase). "
         "'explanation' must be a single sentence."
@@ -214,7 +302,7 @@ def single_answer(explanation: str, gpqa_question: Dict[str, Any]) -> Dict[str, 
     options_text = "\n".join(options_list)
 
     hum = HumanMessage(content=(
-        "Teacher explanation (context):\n" + str(explanation) + "\n\n"
+        "Teacher's solution guide (context):\n" + str(explanation) + "\n\n"
         + "Question: " + qstem + "\n"
         + "Options:\n" + options_text + "\n"
         + "Respond as JSON only."
@@ -262,11 +350,11 @@ def single_answer(explanation: str, gpqa_question: Dict[str, Any]) -> Dict[str, 
     if letter not in {"A","B","C","D"}:
         enforce_llm = _llm(temperature=0.0, json_mode=False, role="answerer")
         enforce_sys = SystemMessage(content=(
-            "Use ONLY the Teacher explanation provided below. Return ONLY a single capital letter among A, B, C, D for the question. "
+            "Use ONLY the Teacher's solution guide provided below. Return ONLY a single capital letter among A, B, C, D for the question. "
             "No punctuation or explanation."
         ))
         enforce_hum = HumanMessage(content=(
-            "Teacher explanation (context):\n" + str(explanation) + "\n\n"
+            "Teacher's solution guide (context):\n" + str(explanation) + "\n\n"
             + "Question: " + qstem + "\n"
             + "Options:\n" + options_text + "\n"
         ))
@@ -276,7 +364,7 @@ def single_answer(explanation: str, gpqa_question: Dict[str, Any]) -> Dict[str, 
         letter = m.group(1) if m else ""
 
     if letter not in {"A","B","C","D"}:
-        raise ValueError("Could not extract a valid answer letter A–D from model output.")
+        raise ValueError("Could not extract a valid answer letter A-D from model output.")
 
     explanation_text = parsed.get("explanation") if isinstance(parsed, dict) else None
     one_sentence = str(explanation_text).strip() if isinstance(explanation_text, str) and explanation_text.strip() else extract_one_sentence(raw_text)
@@ -284,6 +372,9 @@ def single_answer(explanation: str, gpqa_question: Dict[str, Any]) -> Dict[str, 
 
 
 def single_answer_node(state: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Generate a single answer for baseline mode.
+    """
     explanation = state.get("explanation")
     gpqa_question = state.get("gpqa_question", {})
 

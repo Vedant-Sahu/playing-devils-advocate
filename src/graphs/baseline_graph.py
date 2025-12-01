@@ -13,6 +13,7 @@ from langgraph.graph import StateGraph, END
 from src.agents.teacher_agent import baseline_teacher_node
 from src.agents.student_agent import single_answer_node
 from src.agents.grading_agent import grading_node
+from src.agents.answer_leak_checker import check_answer_leakage_node
 
 from IPython.display import Image
 
@@ -49,6 +50,7 @@ def create_baseline_graph() -> StateGraph:
     
     # Add agent nodes
     graph.add_node("teacher", baseline_teacher_node)
+    graph.add_node("leakage checker", check_answer_leakage_node)
     graph.add_node("single answer", single_answer_node)
     graph.add_node("grading", grading_node)
     
@@ -56,6 +58,17 @@ def create_baseline_graph() -> StateGraph:
     graph.add_edge("teacher", "single answer")
     graph.add_edge("single answer", "grading")
     graph.add_edge("grading", END)
+        
+    # Conditional routing from leakage checker
+    def route_from_leakage(state: State) -> str:
+        """Route back to teacher if leakage detected, otherwise to single answer."""
+        return "teacher" if state.get("answer_leakage_detected") else "single answer"
+    
+    graph.add_conditional_edges(
+        "leakage checker",
+        route_from_leakage,
+        {"teacher": "teacher", "single answer": "single answer"}
+    )
     
     # Set entry point
     graph.set_entry_point("teacher")

@@ -1,8 +1,10 @@
 """
-Teacher Agent - Generates educational explanations in baseline or adaptive mode.
+Teacher Agent - Generates step-by-step solution guidance in three modes.
 
-Baseline mode: Zero-shot explanation without examples or feedback
-Adaptive mode: Few-shot with iterative refinement based on student feedback
+Modes:
+- baseline: Zero-shot explanation without feedback
+- single_student_adaptive: Iterative refinement with one student persona
+- multi_student_adaptive: Iterative refinement with multiple student personas
 """
 
 from __future__ import annotations
@@ -16,7 +18,6 @@ from src.dspy_pipeline.manager import (
     run_dspy_teacher_pass,
     should_use_dspy_teacher_backend,
 )
-from src.dspy_pipeline.base_prompts import get_prompt
 
 try:
     from trulens.core.otel.instrument import instrument  # type: ignore
@@ -111,7 +112,7 @@ def _get_tools_description() -> str:
     
     desc = "\n\nAVAILABLE TOOLS:\n"
     desc += "You have access to tools to look up information. "
-    desc += "ALWAYS use at least one tool before providing your explanation to ensure accuracy.\n\n"
+    desc += "Use tools when you need to verify specific facts, constants, or formulas.\n\n"
     
     if os.getenv("USE_RAG", "").lower() in ("1", "true", "yes"):
         desc += "- search_physics_knowledge: Search LibreTexts physics textbook for concepts, formulas, constants\n"
@@ -121,13 +122,12 @@ def _get_tools_description() -> str:
     desc += "\nTOOL USAGE GUIDELINES:\n"
     desc += "- Use search_physics_knowledge for: equations, derivations, conceptual explanations, physical constants\n"
     desc += "- Use search_web for: specific objects (stars, materials), numerical values, recent discoveries\n"
-    desc += "- You SHOULD use tools for most questions to ground your explanation in authoritative sources\n"
-    desc += "- Only skip tools if the question is purely conceptual with no specific facts to verify"
+    desc += "- Use tools when uncertain about specific facts to ensure accuracy\n"
     return desc
 
 
 def _build_teacher_prompt(
-    mode: Literal["baseline", "adaptive"],
+    mode: Literal["baseline", "single_student_adaptive", "multi_student_adaptive"],
     question: str,
     correct_answer: Optional[str] = None,
     student_feedback: Optional[str] = None,
@@ -137,106 +137,124 @@ def _build_teacher_prompt(
     Build system and human messages for the teacher agent based on mode.
     
     Args:
-        mode: "baseline" for zero-shot, "adaptive" for few-shot with refinement
+        mode: Operating mode (baseline, single_student_adaptive, multi_student_adaptive)
         question: The question to explain
-        correct_answer: The correct answer (for guidance, not to reveal)
-        student_feedback: Feedback from student personas (adaptive mode only)
+        correct_answer: The correct answer for guidance
+        student_feedback: Feedback from student persona(s) (adaptive modes only)
         word_cap: Maximum word count for explanation
         
     Returns:
         Tuple of (system_message, human_message)
     """
-    # NOTE: correct_answer is no longer passed to the teacher to prevent answer leakage
-    answer_context = ""
+    # Answer context for guidance
+    if correct_answer:
+        answer_context = f"\n\nCORRECT ANSWER (for your guidance only - DO NOT reveal): {correct_answer}"
+    else:
+        answer_context = ""
     
-    # Shared base prompt for both modes
+    # Base prompt shared across all modes
     base_prompt = (
-        "You are an expert physics teacher teaching undergraduate Physics students with "
-        "varying skills and backgrounds. "
-
+        "You are an expert physics teacher helping undergraduate Physics students understand "
+        "how to solve problems through step-by-step guidance.\n\n"
+        
+        "ANSWER AWARENESS:\n"
+        "You have access to the correct answer to guide your explanation toward the solution path. "
+        "Use this to:\n"
+        "- Focus on the specific approach and steps needed to solve THIS problem\n"
+        "- Structure your guidance to lead students toward the correct solution\n"
+        "- Provide relevant concepts and formulas needed for this specific solution path\n\n"
+        
         "CRITICAL CONSTRAINTS:\n"
-        "- NEVER directly state the correct answer letter or value\n"
-        "- NEVER use specific numbers from the question in your examples\n"
-        "- Teach the underlying concepts generically so students must apply them\n\n"
-
-        "Role: Produce a clear, self-contained explanation that helps students understand " 
-        "the given question and its underlying concepts. "
+        "- NEVER directly state the correct answer letter or final numerical value\n"
+        "- NEVER work through the problem using the specific numbers from the question\n"
+        "- Provide a step-by-step APPROACH to solving problems of this type\n"
+        "- Teach the method generically so students must apply it to the specific numbers\n"
+        "- Frame your guidance as 'how to solve this type of problem' not 'the answer is...'\n\n"
+        
+        "YOUR TASK:\n"
+        "Provide a clear, structured guide on HOW TO SOLVE this problem. Think of it as giving "
+        "students a recipe they must execute themselves. Your explanation should:\n"
+        "1. Identify what type of problem this is and what approach to use\n"
+        "2. List the key steps in order (e.g., 'First, identify the forces...', 'Then, apply conservation of...')\n"
+        "3. Specify which equations or principles to use at each step\n"
+        "4. Explain how to combine the results to reach the final answer\n"
+        "5. Include a generic worked example with different numbers if helpful\n\n"
     )
     
-    # Shared output format and example
-    output_format = (
-        f"Output format: Single block of prose (no headings). Aim for {word_cap} words. "
-        "Include: "
-        "(1) short intuitive orientation, "
-        "(2) core mechanism step-by-step with a tiny numeric example (at most one), "
-        "(3) brief visual/spatial analogy if helpful, " 
-        "(4) short rigorous note (key definitions/equations) where appropriate. "
-        "Each sentence should add new information. "
-        f"Limit explanation to no more than {word_cap} words. "
-        "CRITICAL: DO NOT directly reference the given question or reveal the correct "
-        "answer. If you include any examples in your explanation, do not use any "
-        "information directly mentioned in the problem. Teach the underlying concepts "
-        "generically so students can apply them to solve the problem independently. "
-        "Example of the explanation style:\n"
-        "Question: An electron is at rest (not moving). A relativistic positron is moving " 
-        "horizontally from the left with a constant speed.\nAfter hitting the electron, " 
-        "both annihilate producing 2 photons.\n\nThe direction of one of the  photons is " 
-        "in the upper-right direction. The angle between this direction and the horizontal " 
-        "line/axis is 60 degrees. The photon energy is 0.613 MeV (1.2 times the rest mass " 
-        "of an electron). \n\nWhat was the speed of the positron (expresses as a fraction " 
-        "of the speed of light c):\n"
-        "Explanation: When matter and antimatter collide and annihilate, they convert their "
-        "mass-energy into photons, conserving both energy and momentum. For relativistic "
-        "particles moving at speeds comparable to light, we use E² = (pc)² + (mc²)² where E "
-        "is total energy, p is momentum, m is rest mass, and c is light speed. For photons "
-        "with zero rest mass, E = pc. The Lorentz factor γ = 1/√(1 - v²/c²) relates particle "
-        "speed to energy: E = γmc² and momentum p = γmv. Apply conservation laws: total " 
-        "initial energy equals sum of photon energies; initial momentum vector equals vector "
-        "sum of photon momenta. Break momentum into horizontal and vertical components. The "
-        "photon angle and energy reveal the initial particle's momentum and thus its Lorentz "
-        "factor. From γ, extract speed using v/c = √(1 - 1/γ²). This framework applies broadly "
-        "to two-body decay and annihilation processes. "
-        "Use this explanation as a guide for the question provided by the user."
-    )
-
+    # Mode-specific additions
     if mode == "baseline":
-        # Baseline: Same prompt as adaptive, but no refinement instructions
-        sys = SystemMessage(
-            content=base_prompt + output_format
+        mode_specific = (
+            "MODE: Baseline (Zero-shot)\n"
+            "Generate your best explanation without prior attempts or feedback. "
+            "Focus on clarity and completeness from the start.\n\n"
         )
-        hum = HumanMessage(
-            content=f"Question: {question}{answer_context}\n\nProvide the explanation."
+    elif mode == "single_student_adaptive":
+        mode_specific = (
+            "MODE: Single Student Adaptive\n"
+            "You are in an iterative refinement process with ONE student providing feedback. "
+            "On first iteration, create a well-structured solution guide. "
+            "On later iterations, you will receive feedback identifying gaps or confusion. "
+            "Revise your explanation to address the specific issue raised. "
+            "Prefer clarifying or restructuring over adding new material.\n\n"
         )
-        
-    else:  
-        # Adaptive: Include refinement instructions for handling feedback
-        has_feedback = bool(student_feedback and student_feedback.strip())
-        
-        refinement_instructions = (
-            "On first iteration, create a well-structured explanation covering key concepts. "
-            "On later rounds, you will receive feedback from the TOP-RANKED student critiques "
-            "(only the most important issues identified by independent judges). "
-            "Revise based on this feedback. Prefer tightening, clarifying, or replacing over "
-            "adding new material. "
+    else:  # multi_student_adaptive
+        mode_specific = (
+            "MODE: Multi-Student Adaptive\n"
+            "You are in an iterative refinement process with MULTIPLE students of different personas. "
+            "On first iteration, create a well-structured solution guide. "
+            "On later iterations, you will receive feedback from the TOP-RANKED critiques only "
+            "(the most important issues identified by independent judges). "
+            "Different students look for different types of issues (misconceptions, clarity, rigor, etc.). "
+            "Revise based on the feedback. Prefer tightening, clarifying, or replacing over adding new material.\n\n"
+            
             "IGNORE feedback that:\n"
             "- Focuses on tangential topics not needed for the solution\n"
             "- Misunderstands the core physics principles\n"
             "- Requests information that would give away the answer\n\n"
         )
+    
+    # Output format
+    output_format = (
+        f"OUTPUT FORMAT:\n"
+        f"Write in clear prose paragraphs (no bullet points or headers). Target {word_cap} words.\n"
+        f"Structure your response as:\n"
+        f"1. Brief problem type identification (1-2 sentences)\n"
+        f"2. Step-by-step solution approach with specific actions to take\n"
+        f"3. Key equations/formulas to use (where in the process to use them)\n"
+        f"4. How to interpret and combine results\n"
+        f"5. Optional: Generic example with different numbers to illustrate the method\n\n"
         
-        sys = SystemMessage(
-            content=base_prompt + refinement_instructions + output_format
-        )
+        f"Example style (for a different problem):\n"
+        f"\"This is a relativistic collision problem requiring conservation of energy and momentum. "
+        f"Start by writing the energy conservation equation: total initial energy equals sum of final photon energies. "
+        f"The initial energy includes the positron's kinetic energy plus both rest masses. "
+        f"Next, write momentum conservation in vector form, breaking into horizontal and vertical components. "
+        f"The electron starts at rest, so initial momentum equals the positron's momentum. "
+        f"Use the photon angle and energy to determine each photon's momentum components (recall E = pc for photons). "
+        f"Solve the component equations simultaneously to find the positron's momentum. "
+        f"Convert momentum to velocity using the relativistic relation p = γmv where γ = 1/√(1 - v²/c²). "
+        f"For example, if you found γ = 1.5 for some particle, you would solve 1.5 = 1/√(1 - v²/c²) to get v/c = √(1 - 1/1.5²) = 0.745.\"\n\n"
         
-        # Build human message with optional feedback
-        if has_feedback:
-            fb_text = f"\n\nStudent feedback (top-ranked critiques only):\n{student_feedback}"
-        else:
-            fb_text = "\n\nNo significant issues identified in previous iteration."
-        
-        hum = HumanMessage(
-            content=f"Question: {question}{answer_context}{fb_text}\n\nProvide the explanation."
-        )
+        f"REMEMBER: Teach the METHOD, not the specific solution. Students must apply your steps to their numbers.\n"
+    )
+    
+    # Construct system message
+    sys_content = base_prompt + mode_specific + output_format
+    sys = SystemMessage(content=sys_content)
+    
+    # Construct human message with feedback if applicable
+    human_parts = [f"Question: {question}{answer_context}"]
+    
+    if student_feedback and student_feedback.strip():
+        if mode == "single_student_adaptive":
+            human_parts.append(f"\n\nSTUDENT FEEDBACK:\n{student_feedback}")
+        else:  # multi_student_adaptive
+            human_parts.append(f"\n\nTOP-RANKED STUDENT CRITIQUES:\n{student_feedback}")
+        human_parts.append("\n\nRevise your explanation to address this feedback.")
+    else:
+        human_parts.append("\n\nProvide your step-by-step solution guide.")
+    
+    hum = HumanMessage(content="".join(human_parts))
     
     return sys, hum
 
@@ -244,91 +262,37 @@ def _build_teacher_prompt(
 @instrument()
 def teacher_explain(
     question: str,
-    mode: Literal["baseline", "adaptive"] = "adaptive",
+    mode: Literal["baseline", "single_student_adaptive", "multi_student_adaptive"] = "baseline",
     correct_answer: Optional[str] = None,
     student_feedback: Optional[str] = None,
-    word_cap: int = 300,
+    word_cap: int = 600,
     max_tokens: int = 5000
-) -> str:
+) -> Dict[str, Any]:
     """
-    Generate an explanation for the given question.
+    Generate a step-by-step solution guide for the given question.
     
     Args:
-        mode: "baseline" for zero-shot or "adaptive" for iterative refinement
         question: The question to explain
-        correct_answer: The correct answer (for guidance, not to reveal)
-        student_feedback: Feedback from student personas (adaptive mode only)
+        mode: Operating mode (baseline, single_student_adaptive, multi_student_adaptive)
+        correct_answer: The correct answer for guidance
+        student_feedback: Feedback from student persona(s) (adaptive modes only)
         word_cap: Maximum word count for explanation
+        max_tokens: Maximum tokens for model completion
         
     Returns:
-        Generated explanation text
+        Dictionary with 'explanation' and optionally 'tool_calls'
     """
-    llm = _llm(role="teacher", max_tokens=max_tokens)
-
     # Build prompts based on mode
     sys, hum = _build_teacher_prompt(mode, question, correct_answer, student_feedback, word_cap)
-
-    # Generate explanation
-    resp = llm.invoke([sys, hum])
-    content = resp.content if isinstance(resp.content, str) else str(resp.content)
     
-    # Clean and truncate
-    text = " ".join(content.strip().split())
-    words = text.split()
-    if len(words) > word_cap:
-        text = " ".join(words[:word_cap])
-    
-    return text
-
-
-def adaptive_teacher_node(state: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Teacher node for adaptive refinement graph.
-    
-    Uses adaptive mode with student feedback for iterative improvement.
-    Teacher has access to RAG and web search tools to verify facts when uncertain.
-    """
-    iteration = int(state.get("iteration", 0))
-
-    # Extract question and options from gpqa_question
-    gpqa_question = state.get("gpqa_question", {})
-    if not gpqa_question:
-        raise ValueError("gpqa_question not found in state")
-    question = gpqa_question.get("question", "")
-    options = gpqa_question.get("options", [])
-    # NOTE: correct_answer intentionally not extracted - prevents answer leakage to teacher
-
-    if should_use_dspy_teacher_backend():
-        result = run_dspy_teacher_pass(gpqa_question, teacher_persona="general")
-        explanation = result.get("refined_explanation") or result.get("initial_explanation", "")
-        return {
-            "explanation": explanation,
-            "iteration": iteration + 1,
-            "dspy_payload": result,
-        }
-
-    # Get filtered feedback from previous iteration
-    filtered_feedback = state.get("filtered_critiques", "")
-
-    # Build human message with options and feedback
-    human_parts = [f"Question: {question}"]
-    if options:
-        human_parts.append(f"\nOPTIONS:\n" + "\n".join(options))
-    if filtered_feedback and filtered_feedback.strip():
-        human_parts.append(f"\nStudent feedback (address these gaps):\n{filtered_feedback}")
-    human_parts.append("\nProvide the explanation.")
-
-    # Build system prompt with tools description
+    # Add tools description if available
     tools_desc = _get_tools_description()
-    sys, _ = _build_teacher_prompt("adaptive", question, None, filtered_feedback, 600)
-    sys_content = sys.content + tools_desc
-    
-    sys = SystemMessage(content=sys_content)
-    hum = HumanMessage(content="\n".join(human_parts))
+    if tools_desc:
+        sys = SystemMessage(content=sys.content + tools_desc)
     
     # Get available tools and create LLM
     tools = _get_available_tools()
-    llm = _llm(role="teacher", max_tokens=5000)
+    llm = _llm(role="teacher", max_tokens=max_tokens)
     
     # Track tool calls for logging
     tool_call_logs = []
@@ -339,10 +303,10 @@ def adaptive_teacher_node(state: Dict[str, Any]) -> Dict[str, Any]:
         messages = [sys, hum]
         
         # Agentic loop - let teacher use tools as needed
-        max_tool_calls = 5  # Prevent infinite loops
+        max_tool_iterations = 5  # Prevent infinite loops
         tool_calls_made = 0
         
-        while tool_calls_made < max_tool_calls:
+        while tool_calls_made < max_tool_iterations:
             response = llm_with_tools.invoke(messages)
             messages.append(response)
             
@@ -360,7 +324,6 @@ def adaptive_teacher_node(state: Dict[str, Any]) -> Dict[str, Any]:
                 # Execute the appropriate tool
                 if tool_name == "search_physics_knowledge":
                     result = search_physics_knowledge.invoke(tool_args)
-                    # Log RAG call with context preview
                     tool_call_logs.append({
                         "tool": "rag",
                         "query": tool_args.get("query", ""),
@@ -368,7 +331,6 @@ def adaptive_teacher_node(state: Dict[str, Any]) -> Dict[str, Any]:
                     })
                 elif tool_name == "search_web":
                     result = search_web.invoke(tool_args)
-                    # Log web search call with query
                     tool_call_logs.append({
                         "tool": "web_search",
                         "query": tool_args.get("query", "")
@@ -387,10 +349,14 @@ def adaptive_teacher_node(state: Dict[str, Any]) -> Dict[str, Any]:
         resp = llm.invoke([sys, hum])
         content = resp.content if isinstance(resp.content, str) else str(resp.content)
     
-    explanation = " ".join(content.strip().split())
+    # Clean and truncate
+    text = " ".join(content.strip().split())
+    words = text.split()
+    if len(words) > word_cap:
+        text = " ".join(words[:word_cap])
     
-    # Build result dict - only include tool_calls if any were made
-    result = {"explanation": explanation, "iteration": iteration + 1}
+    # Build result
+    result = {"explanation": text}
     if tool_call_logs:
         result["tool_calls"] = tool_call_logs
     
@@ -399,98 +365,119 @@ def adaptive_teacher_node(state: Dict[str, Any]) -> Dict[str, Any]:
 
 def baseline_teacher_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Teacher node for baseline graph.
+    Teacher node for baseline mode.
     
-    Uses zero-shot mode without examples or feedback.
-    Teacher has access to RAG and web search tools to verify facts when uncertain.
+    Zero-shot explanation without feedback.
+    Extracts question from gpqa_question in state.
     """
-    # Extract question and options from gpqa_question
+    # Extract question from gpqa_question
     gpqa_question = state.get("gpqa_question", {})
     if not gpqa_question:
         raise ValueError("gpqa_question not found in state")
     question = gpqa_question.get("question", "")
-    options = gpqa_question.get("options", [])
+    correct_answer = gpqa_question.get("correct_answer", "")
     
-    # Build human message with options
-    human_parts = [f"Question: {question}"]
-    if options:
-        human_parts.append(f"\nOPTIONS:\n" + "\n".join(options))
-    human_parts.append("\nProvide a clear explanation.")
+    # Generate explanation in baseline mode
+    result = teacher_explain(
+        question=question,
+        mode="baseline",
+        correct_answer=correct_answer,
+        student_feedback=None,
+        word_cap=600
+    )
     
-    # Build system prompt with tools description
-    tools_desc = _get_tools_description()
-    sys, _ = _build_teacher_prompt("baseline", question, None, None, 600)
-    sys_content = sys.content + tools_desc
+    return {
+        "explanation": result["explanation"],
+        "iteration": 1,
+        "tool_calls": result.get("tool_calls", [])
+    }
+
+
+def single_student_adaptive_teacher_node(state: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Teacher node for single student adaptive mode.
     
-    sys = SystemMessage(content=sys_content)
-    hum = HumanMessage(content="\n".join(human_parts))
+    Iterative refinement with feedback from one student persona.
+    Extracts question from gpqa_question in state.
+    """
+    iteration = int(state.get("iteration", 0))
     
-    # Get available tools and create LLM
-    tools = _get_available_tools()
-    llm = _llm(role="teacher", max_tokens=5000)
+    # Extract question from gpqa_question
+    gpqa_question = state.get("gpqa_question", {})
+    if not gpqa_question:
+        raise ValueError("gpqa_question not found in state")
+    question = gpqa_question.get("question", "")
+    correct_answer = gpqa_question.get("correct_answer", "")
     
-    # Track tool calls for logging
-    tool_call_logs = []
+    # Check if using DSPy backend
+    if should_use_dspy_teacher_backend():
+        result = run_dspy_teacher_pass(gpqa_question, teacher_persona="general")
+        explanation = result.get("refined_explanation") or result.get("initial_explanation", "")
+        return {
+            "explanation": explanation,
+            "iteration": iteration + 1,
+            "dspy_payload": result,
+        }
     
-    # If tools available, bind them and run agentic loop
-    if tools:
-        llm_with_tools = llm.bind_tools(tools)
-        messages = [sys, hum]
-        
-        # Agentic loop - let teacher use tools as needed
-        max_tool_calls = 5  # Prevent infinite loops
-        tool_calls_made = 0
-        
-        while tool_calls_made < max_tool_calls:
-            response = llm_with_tools.invoke(messages)
-            messages.append(response)
-            
-            # Check if model wants to use tools
-            if not response.tool_calls:
-                # No more tool calls - we have the final response
-                break
-            
-            # Execute tool calls
-            for tool_call in response.tool_calls:
-                tool_name = tool_call["name"]
-                tool_args = tool_call["args"]
-                tool_id = tool_call["id"]
-                
-                # Execute the appropriate tool
-                if tool_name == "search_physics_knowledge":
-                    result = search_physics_knowledge.invoke(tool_args)
-                    # Log RAG call with context preview
-                    tool_call_logs.append({
-                        "tool": "rag",
-                        "query": tool_args.get("query", ""),
-                        "context_preview": result[:300] + "..." if len(result) > 300 else result
-                    })
-                elif tool_name == "search_web":
-                    result = search_web.invoke(tool_args)
-                    # Log web search call with query
-                    tool_call_logs.append({
-                        "tool": "web_search",
-                        "query": tool_args.get("query", "")
-                    })
-                else:
-                    result = f"Unknown tool: {tool_name}"
-                
-                # Add tool result to messages
-                messages.append(ToolMessage(content=result, tool_call_id=tool_id))
-                tool_calls_made += 1
-        
-        # Extract final content
-        content = response.content if isinstance(response.content, str) else str(response.content)
-    else:
-        # No tools - simple invocation
-        resp = llm.invoke([sys, hum])
-        content = resp.content if isinstance(resp.content, str) else str(resp.content)
+    # Get feedback from previous iteration
+    student_feedback = state.get("single_student_critique", "")
     
-    explanation = " ".join(content.strip().split())
+    # Generate explanation in single student adaptive mode
+    result = teacher_explain(
+        question=question,
+        mode="single_student_adaptive",
+        correct_answer=correct_answer,
+        student_feedback=student_feedback,
+        word_cap=600
+    )
     
-    # Build result dict - only include tool_calls if any were made
-    result = {"explanation": explanation, "iteration": 1}
-    if tool_call_logs:
-        result["tool_calls"] = tool_call_logs
+    return {
+        "explanation": result["explanation"],
+        "iteration": iteration + 1,
+        "tool_calls": result.get("tool_calls", [])
+    }
+
+
+def multi_student_adaptive_teacher_node(state: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Teacher node for multi-student adaptive mode.
     
-    return result
+    Iterative refinement with feedback from multiple student personas.
+    Extracts question from gpqa_question in state.
+    """
+    iteration = int(state.get("iteration", 0))
+    
+    # Extract question from gpqa_question
+    gpqa_question = state.get("gpqa_question", {})
+    if not gpqa_question:
+        raise ValueError("gpqa_question not found in state")
+    question = gpqa_question.get("question", "")
+    correct_answer = gpqa_question.get("correct_answer", "")
+    
+    # Check if using DSPy backend
+    if should_use_dspy_teacher_backend():
+        result = run_dspy_teacher_pass(gpqa_question, teacher_persona="general")
+        explanation = result.get("refined_explanation") or result.get("initial_explanation", "")
+        return {
+            "explanation": explanation,
+            "iteration": iteration + 1,
+            "dspy_payload": result,
+        }
+    
+    # Get filtered feedback from previous iteration (top-ranked critiques)
+    filtered_feedback = state.get("filtered_critiques", "")
+    
+    # Generate explanation in multi-student adaptive mode
+    result = teacher_explain(
+        question=question,
+        mode="multi_student_adaptive",
+        correct_answer=correct_answer,
+        student_feedback=filtered_feedback,
+        word_cap=600
+    )
+    
+    return {
+        "explanation": result["explanation"],
+        "iteration": iteration + 1,
+        "tool_calls": result.get("tool_calls", [])
+    }
