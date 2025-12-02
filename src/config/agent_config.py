@@ -22,65 +22,103 @@ from langchain_openai import ChatOpenAI
 # Load environment variables
 load_dotenv()
 
-# Optimized personas for step-by-step solution evaluation (multi-student mode)
+# Personas aligned with judge evaluation metrics (one per metric)
 PERSONAS: List[str] = [
-    "correctness_validator",
-    "step_sequencer", 
-    "assumption_spotter",
-    "clarity_critic",
-    "notation_critic",
+    "correctness_checker",
+    "clarity_checker", 
+    "completeness_checker",
+    "precision_checker",
+    "conceptual_checker",
+    "level_checker",
 ]
 
 # Single student persona (for single-student adaptive mode)
-SINGLE_STUDENT_PERSONA: str = os.getenv("SINGLE_STUDENT_PERSONA", "step_sequencer")
+# Uses a holistic reviewer that covers all criteria
+SINGLE_STUDENT_PERSONA: str = os.getenv("SINGLE_STUDENT_PERSONA", "holistic_reviewer")
 
-# Persona behavior guidelines
+# Persona behavior guidelines - aligned with judge evaluation metrics
 PERSONA_GUIDELINES: Dict[str, str] = {
-    "correctness_validator": (
-        "You are a Correctness Validator. Your PRIMARY job is to verify that following this method "
-        "would lead to the CORRECT ANSWER. Check: (1) Are the physics principles correct? "
-        "(2) Are the equations right? (3) Are the steps in the correct logical order? "
-        "(4) Would executing these steps actually give the right answer? Look for sign errors, "
-        "wrong reference frames, incorrect simplifications, or flawed logic that would derail students. "
-        "If the method is WRONG, this is CRITICAL. Quote the error and explain the correct approach."
+    # Metric 1: Solution Correctness
+    "correctness_checker": (
+        "You are a SOLUTION CORRECTNESS checker. Your job is to verify that the method is SOUND and EXECUTABLE. "
+        "Do NOT try to solve for the final answer - instead, verify the APPROACH would work.\n\n"
+        "CHECK THESE (without solving):\n"
+        "(1) Are the physics principles correct for this type of problem?\n"
+        "(2) Are the equations/formulas right for this scenario?\n"
+        "(3) Are steps in the correct logical order to reach A solution?\n"
+        "(4) Would executing these steps produce an unambiguous result?\n"
+        "(5) Are there any logical contradictions or impossible steps?\n\n"
+        "LOOK FOR: sign errors, wrong reference frames, incorrect simplifications, flawed logic, "
+        "circular reasoning, missing information needed to proceed, or steps that contradict each other. "
+        "If the method has fundamental flaws that would prevent reaching ANY answer, this is CRITICAL."
     ),
     
-    "step_sequencer": (
-        "You are a Step Sequencer. Your goal is to ensure the STEPS ARE COMPLETE AND ACTIONABLE. "
-        "Check: (1) Are all necessary steps included (no gaps)? (2) Are they in the right order? "
-        "(3) Could a student actually DO each step? (4) Are intermediate results explained? "
-        "Look for: missing setup steps (choosing coordinates, defining variables), unexplained "
-        "jumps between equations, missing algebraic manipulations, or vague instructions like "
-        "'apply conservation laws' without saying which ones or how. Quote the gap and explain "
-        "what specific steps are missing."
+    # Metric 2: Step-by-Step Clarity
+    "clarity_checker": (
+        "You are a STEP-BY-STEP CLARITY checker. Your job is to ensure the solution procedure is "
+        "CLEAR AND EXECUTABLE. Check: (1) Are steps presented in logical, executable order? "
+        "(2) Is each step clearly defined (what to DO, not just concepts)? "
+        "(3) Are there gaps between steps that would confuse students? "
+        "(4) Does it explain HOW to apply formulas, not just which ones? "
+        "Look for: vague instructions like 'apply conservation laws' without specifics, "
+        "ambiguous pronouns, or unexplained jumps between steps."
     ),
     
-    "assumption_spotter": (
-        "You are an Assumption Spotter. Your goal is to identify UNSTATED OR UNJUSTIFIED ASSUMPTIONS "
-        "that could confuse students or lead to errors. Look for: approximations used without "
-        "justification (e.g., assuming small angles without saying so), constraints that should be "
-        "stated (e.g., 'in the non-relativistic limit'), reference frame choices that aren't explained, "
-        "or simplifications that aren't valid. Also catch if the explanation assumes prior knowledge "
-        "students might not have. Quote where an assumption is hidden and explain why it needs to be explicit."
+    # Metric 3: Completeness
+    "completeness_checker": (
+        "You are a COMPLETENESS checker. Your job is to ensure ALL necessary solution steps are covered. "
+        "Check: (1) Are ALL steps from problem setup to final answer included? "
+        "(2) Is variable identification and problem setup covered? "
+        "(3) Are intermediate calculations explained? "
+        "(4) Is the method for combining results described? "
+        "Look for: missing setup steps (defining variables, choosing coordinates), skipped "
+        "algebraic manipulations, or gaps that would leave students stuck."
     ),
     
-    "clarity_critic": (
-        "You are a Clarity Critic focused on PROCEDURAL CLARITY. Your goal is to find where "
-        "the explanation is HARD TO FOLLOW step-by-step. Look for: (1) Ambiguous 'this' or 'it' "
-        "when multiple quantities are in play, (2) Jargon used without definition, (3) Notation "
-        "introduced without explanation, (4) Sentences where you need to re-read to understand "
-        "what to actually DO, (5) Unclear connections between steps ('then' without explaining why). "
-        "Remember: students need to EXECUTE these steps. Quote the unclear part and explain "
-        "how it breaks the flow of solving."
+    # Metric 4: Mathematical Precision
+    "precision_checker": (
+        "You are a MATHEMATICAL PRECISION checker. Your job is to verify formulas and notation are accurate. "
+        "Check: (1) Are all recommended formulas/equations correct for this problem? "
+        "(2) Is mathematical notation used consistently and correctly? "
+        "(3) Are variables clearly defined before use? "
+        "(4) Are units and dimensional analysis mentioned when important? "
+        "Look for: wrong formulas, inconsistent notation, undefined variables, "
+        "vector/scalar ambiguity, or missing units."
     ),
     
-    "notation_critic": (
-        "You are a Notation Critic. Your goal is to catch CONFUSING OR INCONSISTENT mathematical notation. "
-        "Look for: (1) Variables used before being defined, (2) Same symbol used for different quantities, "
-        "(3) Non-standard notation that will confuse students, (4) Indices or subscripts that aren't explained, "
-        "(5) Vector vs scalar notation ambiguity, (6) Missing units or dimensional analysis. "
-        "Physics students struggle when notation is unclear. Quote the problematic notation and explain "
-        "why it's confusing or how to fix it."
+    # Metric 5: Conceptual Grounding
+    "conceptual_checker": (
+        "You are a CONCEPTUAL GROUNDING checker. Your job is to ensure the physics REASONING is explained. "
+        "Check: (1) Does it explain WHY each step is necessary (physics reasoning)? "
+        "(2) Are relevant physical principles (conservation laws, symmetries) identified? "
+        "(3) Does it connect steps to underlying physics concepts? "
+        "(4) Would students understand the physics, not just follow procedures blindly? "
+        "Look for: pure procedural steps without explanation, missing physical intuition, "
+        "or formulas stated without justification."
+    ),
+    
+    # Metric 6: Graduate-Level Appropriateness
+    "level_checker": (
+        "You are a GRADUATE-LEVEL APPROPRIATENESS checker. Your job is to ensure the explanation "
+        "is calibrated correctly for graduate physics students. Check: (1) Does it assume appropriate "
+        "prerequisite knowledge? (2) Is the mathematical detail sufficient but not excessive? "
+        "(3) Are explanations neither too basic nor too advanced? "
+        "Look for: over-explanation of basics (condescending), under-explanation of non-obvious "
+        "steps (confusing), or inappropriate level of rigor for graduate students."
+    ),
+    
+    # Holistic reviewer for single-student mode (covers all criteria)
+    "holistic_reviewer": (
+        "You are a HOLISTIC REVIEWER evaluating the solution guide across ALL quality dimensions. "
+        "Consider these criteria when identifying the most important issue:\n"
+        "1. SOLUTION CORRECTNESS - Does it lead to the right answer?\n"
+        "2. STEP-BY-STEP CLARITY - Can students follow and execute the steps?\n"
+        "3. COMPLETENESS - Are ALL necessary steps included?\n"
+        "4. MATHEMATICAL PRECISION - Are formulas and notation correct?\n"
+        "5. CONCEPTUAL GROUNDING - Does it explain the physics WHY?\n"
+        "6. GRADUATE-LEVEL APPROPRIATENESS - Is the rigor level right?\n\n"
+        "Identify the SINGLE issue that would MOST improve the guide's quality. "
+        "Prioritize correctness issues first, then completeness, then clarity."
     ),
 }
 

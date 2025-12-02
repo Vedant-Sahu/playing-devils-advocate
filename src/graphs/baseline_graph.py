@@ -55,39 +55,15 @@ def create_baseline_graph() -> StateGraph:
     
     # Add agent nodes
     graph.add_node("teacher", baseline_teacher_node)
-    graph.add_node("leakage checker", check_answer_leakage_node)
     graph.add_node("single answer", single_answer_node)
     graph.add_node("grading", grading_node)
+    # Note: leakage checker removed - teacher no longer has access to correct answer
     
     # Define edge flow
-    graph.add_edge("teacher", "leakage checker")
+    graph.add_edge("teacher", "single answer")
     graph.add_edge("single answer", "grading")
     graph.add_edge("grading", END)
         
-    # Conditional routing from leakage checker
-    def route_from_leakage(state: State) -> str:
-        """
-        Route back to teacher if leakage detected, otherwise to single answer.
-        Includes safety limit: after 3 leakage detections, proceed anyway
-        to prevent infinite loops.
-        """
-        leakage_count = state.get("leakage_check_count", 0)
-        # Safety: max 3 attempts to fix leakage
-        if leakage_count >= 3:
-            print(f"⚠️ WARNING: Leakage persists after 3 attempts. Proceeding anyway.")
-            return "single answer"
-        
-        if state.get("answer_leakage_detected", False):
-            return "teacher"
-        else:
-            return "single answer"
-    
-    graph.add_conditional_edges(
-        "leakage checker",
-        route_from_leakage,
-        {"teacher": "teacher", "single answer": "single answer"}
-    )
-    
     # Set entry point
     graph.set_entry_point("teacher")
     

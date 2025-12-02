@@ -7,14 +7,16 @@ from src.config.agent_config import _llm, PERSONAS, PERSONA_GUIDELINES
 from src.utils.parsing import _extract_json
 
 
-# Persona importance weights (higher = more critical role)
+# Persona importance weights aligned with judge metrics (higher = more critical role)
 # These differentiate the value of finding issues in each domain
 PERSONA_WEIGHTS: Dict[str, float] = {
-    "correctness_validator": 2.0,      # Most critical - wrong method is catastrophic
-    "step_sequencer": 1.5,             # Very important - missing steps blocks students
-    "assumption_spotter": 1.3,         # Important - hidden assumptions confuse
-    "clarity_critic": 1.0,             # Important - unclear = unusable
-    "notation_critic": 0.8,            # Helpful but less critical than correctness
+    "correctness_checker": 2.0,       # Metric 1: Solution Correctness - most critical
+    "clarity_checker": 1.5,           # Metric 2: Step-by-Step Clarity
+    "completeness_checker": 1.5,      # Metric 3: Completeness - missing steps blocks students
+    "precision_checker": 1.3,         # Metric 4: Mathematical Precision
+    "conceptual_checker": 1.2,        # Metric 5: Conceptual Grounding
+    "level_checker": 1.0,             # Metric 6: Graduate-Level Appropriateness
+    "holistic_reviewer": 1.5,         # Single-student mode: balanced weight
 }
 
 
@@ -272,11 +274,14 @@ def _format_all_critiques(scored: List[Dict[str, Any]]) -> str:
     for i, item in enumerate(valid_issues, 1):
         fb = item["feedback"]
         persona_display = item['persona'].replace('_', ' ').title()
+        criteria = fb.get('criteria', 'general')
         
-        result += f"{i}. [{persona_display}] (rank #{item['rank']}, score {item['score']:.2f}):\n"
+        result += f"{i}. [{persona_display}] - {criteria.upper()} (rank #{item['rank']}, score {item['score']:.2f}):\n"
         result += f"   Issue: {fb['issue']}\n"
         if fb.get('quote'):
             result += f"   Quote: \"{fb['quote']}\"\n"
+        if fb.get('suggestion'):
+            result += f"   >>> SUGGESTED FIX: {fb['suggestion']}\n"
         
         # Show scoring breakdown for transparency
         result += (
@@ -310,6 +315,8 @@ def _update_score_history(
             "score": item["score"],
             "rank": item["rank"],
             "issue": item["feedback"].get("issue") or "No issue found",
+            "suggestion": item["feedback"].get("suggestion"),
+            "criteria": item["feedback"].get("criteria"),
             "validated_severity": item["validated_severity"],
             "severity_justification": item["severity_justification"],
             "role_alignment": item.get("role_alignment", 0.0),

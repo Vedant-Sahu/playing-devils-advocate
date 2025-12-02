@@ -63,9 +63,9 @@ def create_single_adaptive_graph() -> StateGraph:
     graph.add_node("teacher", single_student_adaptive_teacher_node)
     graph.add_node("student critique", single_student_critique_node)
     graph.add_node("stopper", stopper_node)
-    graph.add_node("leakage checker", check_answer_leakage_node)
     graph.add_node("single answer", single_answer_node)
     graph.add_node("grading", grading_node)
+    # Note: leakage checker removed - teacher no longer has access to correct answer
     
     # Define edge flow
     graph.add_edge("teacher", "student critique")
@@ -75,37 +75,13 @@ def create_single_adaptive_graph() -> StateGraph:
     
     # Conditional routing from stopper
     def route_from_stop(state: State) -> str:
-        """Route to leakage checker if STOP, otherwise back to teacher for refinement."""
-        return "leakage checker" if state.get("decision") == "STOP" else "teacher"
+        """Route to single answer if STOP, otherwise back to teacher for refinement."""
+        return "single answer" if state.get("decision") == "STOP" else "teacher"
     
     graph.add_conditional_edges(
         "stopper",
         route_from_stop,
-        {"leakage checker": "leakage checker", "teacher": "teacher"}
-    )
-    
-    # Conditional routing from leakage checker
-    def route_from_leakage(state: State) -> str:
-        """
-        Route back to teacher if leakage detected, otherwise to single answer.
-        Includes safety limit: after 3 leakage detections, proceed anyway
-        to prevent infinite loops.
-        """
-        leakage_count = state.get("leakage_check_count", 0)
-        # Safety: max 3 attempts to fix leakage
-        if leakage_count >= 3:
-            print(f"⚠️ WARNING: Leakage persists after 3 attempts. Proceeding anyway.")
-            return "single answer"
-        
-        if state.get("answer_leakage_detected", False):
-            return "teacher"
-        else:
-            return "single answer"
-    
-    graph.add_conditional_edges(
-        "leakage checker",
-        route_from_leakage,
-        {"teacher": "teacher", "single answer": "single answer"}
+        {"single answer": "single answer", "teacher": "teacher"}
     )
     
     # Set entry point

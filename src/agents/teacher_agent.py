@@ -131,21 +131,21 @@ def _get_tools_description() -> str:
         desc += "- search_web: Search the web for specific facts, star properties, material constants, current values\n"
     
     desc += "\nTOOL USAGE GUIDELINES:\n"
-    desc += "- ALWAYS verify specific constants and values before using them in explanations\n"
+    desc += "- STRONGLY RECOMMENDED: Verify specific constants and values before using them\n"
     desc += "- Use search_physics_knowledge FIRST for physics concepts and standard formulas\n"
     desc += "- Use search_web for domain-specific data (astronomy, materials science, etc.)\n"
-    desc += "- If a question mentions specific objects or phenomena, look them up\n"
-    desc += "- Better to verify and be correct than assume and mislead students\n\n"
-    desc += "**MANDATORY**: You MUST use at least one tool call before providing your explanation. "
-    desc += "Search for relevant physics concepts or verify key facts from the question first. "
-    desc += "Do NOT skip tool usage - this is required for quality assurance.\n"
+    desc += "- If a question mentions specific objects or phenomena, consider looking them up\n"
+    desc += "- Better to verify and be correct than assume and potentially mislead students\n\n"
+    desc += "Using tools is STRONGLY ENCOURAGED when you are uncertain about specific values, "
+    desc += "formulas, or concepts. Students may also request you use tools in their feedback "
+    desc += "if they believe additional research would help clarify the explanation.\n"
     return desc
 
 
 def _build_teacher_prompt(
     mode: Literal["baseline", "single_student_adaptive", "multi_student_adaptive"],
     question: str,
-    correct_answer: Optional[str] = None,
+    options: Optional[List[str]] = None,
     student_feedback: Optional[str] = None,
     word_cap: int = 600,
 ) -> tuple[SystemMessage, HumanMessage]:
@@ -155,46 +155,51 @@ def _build_teacher_prompt(
     Args:
         mode: Operating mode (baseline, single_student_adaptive, multi_student_adaptive)
         question: The question to explain
-        correct_answer: The correct answer for guidance
+        options: List of answer options (without revealing which is correct)
         student_feedback: Feedback from student persona(s) (adaptive modes only)
         word_cap: Maximum word count for explanation
         
     Returns:
         Tuple of (system_message, human_message)
     """
-    # Answer context for guidance
-    if correct_answer:
-        answer_context = f"\n\nCORRECT ANSWER (for your guidance only - DO NOT reveal): {correct_answer}"
+    # Format options for display
+    if options:
+        options_text = "\n\nANSWER OPTIONS:\n" + "\n".join(options)
     else:
-        answer_context = ""
+        options_text = ""
     
     # Base prompt shared across all modes
     base_prompt = (
         "You are an expert physics teacher helping undergraduate Physics students understand "
         "how to solve problems through step-by-step guidance.\n\n"
         
-        "ANSWER AWARENESS:\n"
-        "You have access to the correct answer to guide your explanation toward the solution path. "
-        "Use this to:\n"
-        "- Focus on the specific approach and steps needed to solve THIS problem\n"
-        "- Structure your guidance to lead students toward the correct solution\n"
-        "- Provide relevant concepts and formulas needed for this specific solution path\n\n"
-        
-        "CRITICAL CONSTRAINTS:\n"
-        "- NEVER directly state the correct answer letter or final numerical value\n"
-        "- NEVER work through the problem using the specific numbers from the question\n"
-        "- Provide a step-by-step APPROACH to solving problems of this type\n"
-        "- Teach the method generically so students must apply it to the specific numbers\n"
-        "- Frame your guidance as 'how to solve this type of problem' not 'the answer is...'\n\n"
-        
         "YOUR TASK:\n"
-        "Provide a clear, structured guide on HOW TO SOLVE this problem. Think of it as giving "
-        "students a recipe they must execute themselves. Your explanation should:\n"
+        "Provide a clear, structured guide on HOW TO SOLVE this problem. You can see the "
+        "answer options but you do NOT know which one is correct. Your job is to teach "
+        "the METHOD so students can work through the problem and identify the correct answer themselves.\n\n"
+        
+        "Your explanation should:\n"
         "1. Identify what type of problem this is and what approach to use\n"
         "2. List the key steps in order (e.g., 'First, identify the forces...', 'Then, apply conservation of...')\n"
         "3. Specify which equations or principles to use at each step\n"
         "4. Explain how to combine the results to reach the final answer\n"
         "5. Include a generic worked example with different numbers if helpful\n\n"
+        
+        "GRADING CRITERIA (your explanation will be evaluated on):\n"
+        "1. SOLUTION CORRECTNESS - Does your method lead to the right answer?\n"
+        "2. STEP-BY-STEP CLARITY - Can students follow and execute your steps?\n"
+        "3. COMPLETENESS - Are ALL necessary steps included (no gaps)?\n"
+        "4. MATHEMATICAL PRECISION - Are formulas and notation correct?\n"
+        "5. CONCEPTUAL GROUNDING - Do you explain the physics WHY, not just the procedure?\n"
+        "6. GRADUATE-LEVEL APPROPRIATENESS - Is the rigor level right for graduate students?\n\n"
+        
+        "SELF-VERIFICATION (do this before finalizing):\n"
+        "Before submitting your explanation, mentally walk through your method:\n"
+        "- Can you follow your own steps from start to finish without getting stuck?\n"
+        "- Does each step logically flow to the next with no gaps?\n"
+        "- Would your method produce ONE unambiguous answer (even if you don't know which)?\n"
+        "- Are there any circular arguments or missing information?\n"
+        "If your method has holes, fix them before submitting.\n\n"
     )
     
     # Mode-specific additions
@@ -209,19 +214,26 @@ def _build_teacher_prompt(
             "MODE: Single Student Adaptive\n"
             "You are in an iterative refinement process with ONE student providing feedback. "
             "On first iteration, create a well-structured solution guide. "
-            "On later iterations, you will receive feedback identifying gaps or confusion. "
-            "Revise your explanation to address the specific issue raised. "
-            "Prefer clarifying or restructuring over adding new material.\n\n"
+            "On later iterations, you will receive specific feedback with SUGGESTED FIXES.\n\n"
+            "YOU MUST IMPLEMENT THE SUGGESTED FIXES - do not just acknowledge them:\n"
+            "- If feedback says 'Add X', literally add X to your explanation\n"
+            "- If feedback says 'Change Y to Z', find Y and replace it with Z\n"
+            "- If feedback says something is MISSING, add the missing content\n"
+            "- Show the improvement clearly in your revised explanation\n\n"
         )
     else:  # multi_student_adaptive
         mode_specific = (
             "MODE: Multi-Student Adaptive\n"
-            "You are in an iterative refinement process with MULTIPLE students of different personas. "
+            "You are in an iterative refinement process with MULTIPLE students checking different criteria. "
             "On first iteration, create a well-structured solution guide. "
-            "On later iterations, you will receive feedback from the TOP-RANKED critiques only "
-            "(the most important issues identified by independent judges). "
-            "Different students look for different types of issues (misconceptions, clarity, rigor, etc.). "
-            "Revise based on the feedback. Prefer tightening, clarifying, or replacing over adding new material.\n\n"
+            "On later iterations, you will receive RANKED feedback with SUGGESTED FIXES from students.\n\n"
+            "Each student focuses on ONE criterion (correctness, clarity, completeness, precision, conceptual, level). "
+            "Their suggestions target specific improvements for that criterion.\n\n"
+            "YOU MUST IMPLEMENT THE SUGGESTED FIXES - do not just acknowledge them:\n"
+            "- Each feedback includes a 'SUGGESTED FIX' - incorporate it into your explanation\n"
+            "- If multiple students suggest improvements, implement ALL valid ones\n"
+            "- If suggestions conflict, prioritize: correctness > completeness > clarity > others\n"
+            "- Your revised explanation should visibly reflect every suggestion you accepted\n\n"
             
             "IGNORE feedback that:\n"
             "- Focuses on tangential topics not needed for the solution\n"
@@ -259,14 +271,15 @@ def _build_teacher_prompt(
     sys = SystemMessage(content=sys_content)
     
     # Construct human message with feedback if applicable
-    human_parts = [f"Question: {question}{answer_context}"]
+    human_parts = [f"Question: {question}{options_text}"]
     
     if student_feedback and student_feedback.strip():
         if mode == "single_student_adaptive":
-            human_parts.append(f"\n\nSTUDENT FEEDBACK:\n{student_feedback}")
+            human_parts.append(f"\n\nSTUDENT FEEDBACK WITH SUGGESTED FIX:\n{student_feedback}")
+            human_parts.append("\n\nIMPLEMENT the suggested fix in your revised explanation. Do not just acknowledge it - ADD the content.")
         else:  # multi_student_adaptive
-            human_parts.append(f"\n\nTOP-RANKED STUDENT CRITIQUES:\n{student_feedback}")
-        human_parts.append("\n\nRevise your explanation to address this feedback.")
+            human_parts.append(f"\n\nRANKED STUDENT CRITIQUES WITH SUGGESTED FIXES:\n{student_feedback}")
+            human_parts.append("\n\nIMPLEMENT each valid suggestion. Your revised explanation must visibly include the improvements.")
     else:
         human_parts.append("\n\nProvide your step-by-step solution guide.")
     
@@ -279,7 +292,7 @@ def _build_teacher_prompt(
 def teacher_explain(
     question: str,
     mode: Literal["baseline", "single_student_adaptive", "multi_student_adaptive"] = "baseline",
-    correct_answer: Optional[str] = None,
+    options: Optional[List[str]] = None,
     student_feedback: Optional[str] = None,
     word_cap: int = 600,
     max_tokens: int = 5000
@@ -290,7 +303,7 @@ def teacher_explain(
     Args:
         question: The question to explain
         mode: Operating mode (baseline, single_student_adaptive, multi_student_adaptive)
-        correct_answer: The correct answer for guidance
+        options: List of answer options (without revealing which is correct)
         student_feedback: Feedback from student persona(s) (adaptive modes only)
         word_cap: Maximum word count for explanation
         max_tokens: Maximum tokens for model completion
@@ -299,7 +312,7 @@ def teacher_explain(
         Dictionary with 'explanation' and optionally 'tool_calls'
     """
     # Build prompts based on mode
-    sys, hum = _build_teacher_prompt(mode, question, correct_answer, student_feedback, word_cap)
+    sys, hum = _build_teacher_prompt(mode, question, options, student_feedback, word_cap)
     
     # Add tools description if available
     tools_desc = _get_tools_description()
@@ -398,13 +411,13 @@ def baseline_teacher_node(state: Dict[str, Any]) -> Dict[str, Any]:
     if not gpqa_question:
         raise ValueError("gpqa_question not found in state")
     question = gpqa_question.get("question", "")
-    correct_answer = gpqa_question.get("correct_answer", "")
+    options = gpqa_question.get("options", [])
     
     # Generate explanation in baseline mode
     result = teacher_explain(
         question=question,
         mode="baseline",
-        correct_answer=correct_answer,
+        options=options,
         student_feedback=None,
         word_cap=600
     )
@@ -430,7 +443,7 @@ def single_student_adaptive_teacher_node(state: Dict[str, Any]) -> Dict[str, Any
     if not gpqa_question:
         raise ValueError("gpqa_question not found in state")
     question = gpqa_question.get("question", "")
-    correct_answer = gpqa_question.get("correct_answer", "")
+    options = gpqa_question.get("options", [])
     
     # Check if using DSPy backend
     if should_use_dspy_teacher_backend():
@@ -449,7 +462,7 @@ def single_student_adaptive_teacher_node(state: Dict[str, Any]) -> Dict[str, Any
     result = teacher_explain(
         question=question,
         mode="single_student_adaptive",
-        correct_answer=correct_answer,
+        options=options,
         student_feedback=student_feedback,
         word_cap=600
     )
@@ -475,7 +488,7 @@ def multi_student_adaptive_teacher_node(state: Dict[str, Any]) -> Dict[str, Any]
     if not gpqa_question:
         raise ValueError("gpqa_question not found in state")
     question = gpqa_question.get("question", "")
-    correct_answer = gpqa_question.get("correct_answer", "")
+    options = gpqa_question.get("options", [])
     
     # Check if using DSPy backend
     if should_use_dspy_teacher_backend():
@@ -494,7 +507,7 @@ def multi_student_adaptive_teacher_node(state: Dict[str, Any]) -> Dict[str, Any]
     result = teacher_explain(
         question=question,
         mode="multi_student_adaptive",
-        correct_answer=correct_answer,
+        options=options,
         student_feedback=filtered_feedback,
         word_cap=600
     )

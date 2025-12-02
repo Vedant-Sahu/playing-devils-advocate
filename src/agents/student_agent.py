@@ -60,16 +60,25 @@ def student_respond(
     sys = SystemMessage(
         content=(
             guide
-            + "\n\nYour task: Identify the SINGLE MOST IMPORTANT issue with this solution guide.\n"
-            " Focus on problems that would confuse students trying to solve the problem.\n\n"
-            " Return a JSON object with:\n"
-            " - 'issue': Brief description of the main problem (max 100 words)\n"
-            " - 'quote': Exact phrase from explanation that demonstrates the issue\n\n"
-            " If the explanation is genuinely good with no significant issues, return:\n"
-            " {'issue': null, 'quote': null}\n\n"
-            " DO NOT rate severity yourself - independent judges will evaluate that.\n"
-            " DO NOT provide generic praise or multiple small issues.\n"
-            " Focus on finding the most important issue you can identify.\n"
+            + "\n\nYour task: AGGRESSIVELY critique this solution guide to force improvement.\n\n"
+            "BE DEMANDING. The guide will be GRADED on these criteria - find what's MISSING or WEAK:\n"
+            "1. SOLUTION CORRECTNESS - Is the method flawed? Would it lead to wrong answer?\n"
+            "2. STEP-BY-STEP CLARITY - Are there vague or unexecutable steps?\n"
+            "3. COMPLETENESS - What steps are MISSING that students need?\n"
+            "4. MATHEMATICAL PRECISION - Are formulas wrong or notation unclear?\n"
+            "5. CONCEPTUAL GROUNDING - Where does it fail to explain WHY?\n"
+            "6. GRADUATE-LEVEL APPROPRIATENESS - Too basic or too advanced?\n\n"
+            "Return a JSON object with:\n"
+            " - 'issue': What is WRONG or MISSING (be specific, max 100 words)\n"
+            " - 'quote': Exact phrase showing the problem (or 'MISSING' if something is absent)\n"
+            " - 'suggestion': EXACT TEXT or CONTENT the teacher must ADD or CHANGE (max 80 words)\n"
+            " - 'criteria': Which criterion this affects ('correctness', 'clarity', 'completeness', 'precision', 'conceptual', 'level')\n\n"
+            "YOUR SUGGESTION MUST BE ACTIONABLE - tell the teacher EXACTLY what to write or add.\n"
+            "Bad: 'Add more detail about forces'\n"
+            "Good: 'Add: First identify all forces acting on the object: gravity (mg downward), normal force (N perpendicular to surface), and friction (f opposing motion).'\n\n"
+            "If the explanation is genuinely excellent with no room for improvement, return:\n"
+            "{'issue': null, 'quote': null, 'suggestion': null, 'criteria': null}\n\n"
+            "But be SKEPTICAL - there is almost always something that can be improved.\n"
             + performance_context
         )
     )
@@ -83,15 +92,21 @@ def student_respond(
     if not isinstance(parsed, dict):
         raise ValueError("Student feedback must be a JSON object.")
     
-    required_keys = {"issue", "quote"}
-    if set(parsed.keys()) != required_keys:
-        raise ValueError(f"Expected keys {required_keys}, got {set(parsed.keys())}")
+    required_keys = {"issue", "quote", "suggestion", "criteria"}
+    # Allow subset if some are null
+    if not all(k in parsed for k in required_keys):
+        # Add missing keys as None
+        for k in required_keys:
+            if k not in parsed:
+                parsed[k] = None
     
-    # Return normalized format
+    # Return normalized format with suggestion and criteria
     return {
         "persona": persona,
         "issue": parsed.get("issue"),
-        "quote": parsed.get("quote")
+        "quote": parsed.get("quote"),
+        "suggestion": parsed.get("suggestion"),
+        "criteria": parsed.get("criteria")
     }
 
 
@@ -115,9 +130,9 @@ def single_student_critique_node(state: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(fb, dict):
         raise ValueError(f"student_respond must return an object for persona '{persona}'.")
     
-    # Format as simple string for single student mode
+    # Format as simple string for single student mode - include suggestion
     if fb.get("issue"):
-        critique_text = f"Issue: {fb['issue']}\nQuote: {fb['quote']}"
+        critique_text = f"Issue ({fb.get('criteria', 'general')}): {fb['issue']}\nQuote: {fb['quote']}\nSuggested Fix: {fb.get('suggestion', 'N/A')}"
     else:
         critique_text = "No significant issues identified."
     
