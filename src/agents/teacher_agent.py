@@ -97,10 +97,14 @@ def search_web(query: str) -> str:
 def _get_available_tools() -> List:
     """Get list of tools available based on env config."""
     tools = []
-    if os.getenv("USE_RAG", "").lower() in ("1", "true", "yes"):
+    use_rag = os.getenv("USE_RAG", "")
+    use_web = os.getenv("USE_WEB_SEARCH", "")
+    print(f"    [DEBUG] USE_RAG={use_rag!r}, USE_WEB_SEARCH={use_web!r}")
+    if use_rag.lower() in ("1", "true", "yes"):
         tools.append(search_physics_knowledge)
-    if os.getenv("USE_WEB_SEARCH", "").lower() in ("1", "true", "yes"):
+    if use_web.lower() in ("1", "true", "yes"):
         tools.append(search_web)
+    print(f"    [DEBUG] Available tools: {[t.name for t in tools]}")
     return tools
 
 
@@ -110,19 +114,31 @@ def _get_tools_description() -> str:
     if not tools:
         return ""
     
-    desc = "\n\nAVAILABLE TOOLS:\n"
-    desc += "You have access to tools to look up information. "
-    desc += "Use tools when you need to verify specific facts, constants, or formulas.\n\n"
+    desc = "\n\nAVAILABLE TOOLS - USE THEM LIBERALLY:\n"
+    desc += "You have access to tools to look up and VERIFY information. "
+    desc += "Be intellectually humble - even experts make mistakes on specific values and edge cases.\n\n"
+    
+    desc += "WHEN TO USE TOOLS (err on the side of using them):\n"
+    desc += "- ANY specific numerical value (constants, properties, measurements)\n"
+    desc += "- Formulas you haven't used recently - verify the exact form\n"
+    desc += "- Properties of specific objects (stars, materials, particles)\n"
+    desc += "- Boundary conditions or special cases\n"
+    desc += "- Anything where being wrong would mislead students\n\n"
     
     if os.getenv("USE_RAG", "").lower() in ("1", "true", "yes"):
-        desc += "- search_physics_knowledge: Search LibreTexts physics textbook for concepts, formulas, constants\n"
+        desc += "- search_physics_knowledge: Search LibreTexts physics textbook for concepts, formulas, constants, derivations\n"
     if os.getenv("USE_WEB_SEARCH", "").lower() in ("1", "true", "yes"):
-        desc += "- search_web: Search the web for specific facts, star properties, current values\n"
+        desc += "- search_web: Search the web for specific facts, star properties, material constants, current values\n"
     
     desc += "\nTOOL USAGE GUIDELINES:\n"
-    desc += "- Use search_physics_knowledge for: equations, derivations, conceptual explanations, physical constants\n"
-    desc += "- Use search_web for: specific objects (stars, materials), numerical values, recent discoveries\n"
-    desc += "- Use tools when uncertain about specific facts to ensure accuracy\n"
+    desc += "- ALWAYS verify specific constants and values before using them in explanations\n"
+    desc += "- Use search_physics_knowledge FIRST for physics concepts and standard formulas\n"
+    desc += "- Use search_web for domain-specific data (astronomy, materials science, etc.)\n"
+    desc += "- If a question mentions specific objects or phenomena, look them up\n"
+    desc += "- Better to verify and be correct than assume and mislead students\n\n"
+    desc += "**MANDATORY**: You MUST use at least one tool call before providing your explanation. "
+    desc += "Search for relevant physics concepts or verify key facts from the question first. "
+    desc += "Do NOT skip tool usage - this is required for quality assurance.\n"
     return desc
 
 
@@ -299,6 +315,7 @@ def teacher_explain(
     
     # If tools available, bind them and run agentic loop
     if tools:
+        print(f"    [DEBUG] Binding {len(tools)} tools to LLM")
         llm_with_tools = llm.bind_tools(tools)
         messages = [sys, hum]
         
@@ -313,7 +330,10 @@ def teacher_explain(
             # Check if model wants to use tools
             if not response.tool_calls:
                 # No more tool calls - we have the final response
+                print(f"    [DEBUG] No tool calls in response, finishing")
                 break
+            else:
+                print(f"    [DEBUG] Model requested {len(response.tool_calls)} tool call(s)")
             
             # Execute tool calls
             for tool_call in response.tool_calls:
@@ -358,7 +378,10 @@ def teacher_explain(
     # Build result
     result = {"explanation": text}
     if tool_call_logs:
+        print(f"    [DEBUG] Recording {len(tool_call_logs)} tool calls in result")
         result["tool_calls"] = tool_call_logs
+    else:
+        print(f"    [DEBUG] No tool calls to record")
     
     return result
 

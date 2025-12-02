@@ -95,12 +95,18 @@ def create_single_adaptive_graph() -> StateGraph:
         # Safety: max 3 attempts to fix leakage
         if leakage_count >= 3:
             print(f"⚠️ WARNING: Leakage persists after 3 attempts. Proceeding anyway.")
-            return "single_answer"
+            return "single answer"
         
         if state.get("answer_leakage_detected", False):
             return "teacher"
         else:
-            return "single_answer"
+            return "single answer"
+    
+    graph.add_conditional_edges(
+        "leakage checker",
+        route_from_leakage,
+        {"teacher": "teacher", "single answer": "single answer"}
+    )
     
     # Set entry point
     graph.set_entry_point("teacher")

@@ -60,7 +60,7 @@ def create_baseline_graph() -> StateGraph:
     graph.add_node("grading", grading_node)
     
     # Define edge flow
-    graph.add_edge("teacher", "single answer")
+    graph.add_edge("teacher", "leakage checker")
     graph.add_edge("single answer", "grading")
     graph.add_edge("grading", END)
         
@@ -75,12 +75,12 @@ def create_baseline_graph() -> StateGraph:
         # Safety: max 3 attempts to fix leakage
         if leakage_count >= 3:
             print(f"⚠️ WARNING: Leakage persists after 3 attempts. Proceeding anyway.")
-            return "single_answer"
+            return "single answer"
         
         if state.get("answer_leakage_detected", False):
             return "teacher"
         else:
-            return "single_answer"
+            return "single answer"
     
     graph.add_conditional_edges(
         "leakage checker",
